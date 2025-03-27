@@ -1,94 +1,83 @@
-using Gridap, GridapGmsh
+using Gridap
+using LineSearches: BackTracking
 
-function g(t, x)
-  if x[1] == 0
-    return 1
-  else
-    return 0
-  end
-end
+n = 100
+domain = (0,20,0,1)
+partition = (n,n)
+model = CartesianDiscreteModel(domain,partition)
+# writevtk(model, (@__DIR__)*"/model")
 
-g(t) = x -> g(t, x)
+labels = get_face_labeling(model)
+add_tag_from_tags!(labels,"inlet",[7,])
+add_tag_from_tags!(labels,"outlet",[8,])
+add_tag_from_tags!(labels,"walls",[1,2,3,4,5,7])
 
-domain = (0, 20, 0, 1)
-partition = (20, 20)
-model = CartesianDiscreteModel(domain, partition)
-# model = GmshDiscreteModel("rectangular-domain.msh")
-writevtk(model, (@__DIR__)*"/model")
-# writevtk(Ω, (@__DIR__)*"/model")
+order = 2
+reffeᵤ = ReferenceFE(lagrangian, VectorValue{2, Float64}, order)
+V = TestFESpace(model, reffeᵤ, conformity=:H1, labels=labels, dirichlet_tags=["inlet", "outlet", "walls"])
 
-order = 1
-reffe = ReferenceFE(lagrangian, Float64, order)
+reffeₚ = ReferenceFE(lagrangian, Float64, order-1; space=:P)
+Q = TestFESpace(model, reffeₚ, conformity=:L2, constraint=:zeromean)
 
-V0 = TestFESpace(model, reffe, dirichlet_tags=["tag_1", "tag_3", "tag_7"])
-Ug = TransientTrialFESpace(V0, g)
+# With the options `:Lagrangian`, `space=:P`, `valuetype=Float64`, and `order=order-1`, we select the local polynomial space $P_{k-1}(T)$ on the cells $T\in\mathcal{T}$. With the symbol `space=:P` we specifically chose a local Lagrangian interpolation of type "P". Without using `space=:P`, would lead to a local Lagrangian of type "Q" since this is the default for quadrilateral or hexahedral elements. On the other hand, `constraint=:zeromean` leads to a FE space, whose functions are constrained to have mean value equal to zero, which is just what we need for the pressure space. With these objects, we build the trial multi-field FE spaces
 
-# ## Triangulation and quadrature
+inletVelocity = VectorValue(1,0)
+wallVelocity = VectorValue(0,0)
+outletPressure = 0
+U = TrialFESpace(V, [inletVelocity, outletPressure, wallVelocity])
+P = TrialFESpace(Q)
 
-# As usual, we equip the model with an integration mesh and a measure
+Y = MultiFieldFESpace([V, Q])
+X = MultiFieldFESpace([U, P])
 
-degree = 2
-Ω = Triangulation(model)
-dΩ = Measure(Ω, degree)
+# ## Triangulation and integration quadrature
+#
+# From the discrete model we can define the triangulation and integration measure
 
-neumanntags = ["tag_2", "tag_4", "tag_5", "tag_6", "tag_8"]
-Γ = BoundaryTriangulation(model, tags=neumanntags)
-dΓ = Measure(Γ, degree)
+degree = order
+Ωₕ = Triangulation(model)
+dΩ = Measure(Ωₕ,degree)
 
-# ## Weak form
-# We define the thermal diffusivity $\alpha$ and the rate of external temperature generation $f$.
+# ## Nonlinear weak form
+#
+# The different terms of the nonlinear weak form for this example are defined following an approach similar to the one discussed for the $p$-Laplacian equation, but this time using the notation for multi-field problems.
 
-# α(t) = x -> 1 + sin(t) * (x[1]^2 + x[2]^2) / 4
-α(t) = 1
-# f(t) = x -> sin(t) * sinpi(x[1]) * sinpi(x[2])
-f(t) = 0
+const Re = 10.0
+conv(u,∇u) = Re*(∇u')⋅u
+dconv(du,∇du,u,∇u) = conv(u,∇du)+conv(du,∇u)
 
-# We are going to construct a transient linear FEOperator by providing the bilinear forms associated to $\partial_{t} u$ and $u$, as well as the forcing term. Note that they now receive time as an additional argument, and the time derivative operator is `∂t`.
+# The bilinear form reads
+a((u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - (∇⋅v)*p + q*(∇⋅u) )dΩ
 
-m(t, dtu, v) = ∫(v * dtu)dΩ
-a(t, u, v) = ∫(α(t) * ∇(v) ⋅ ∇(u))dΩ
-l(t, v) = ∫(v * f(t))dΩ
-op = TransientLinearFEOperator((a, m), l, Ug, V0)
+# The nonlinear term and its Jacobian are given by
+c(u,v) = ∫( v⊙(conv∘(u,∇(u))) )dΩ
+dc(u,du,v) = ∫( v⊙(dconv∘(du,∇(du),u,∇(u))) )dΩ
 
-# In our case, the mass term ($m(t, \cdot, \cdot)$) is constant in time. We can take advantage of that to save some computational effort, and indicate it to Gridap as follows
-# op_opt = TransientLinearFEOperator((a, m), l, Ug, V0, constant_forms=(true, false))
+# Finally, the Navier-Stokes weak form residual and Jacobian can be defined as
+res((u,p),(v,q)) = a((u,p),(v,q)) + c(u,v)
+jac((u,p),(du,dp),(v,q)) = a((du,dp),(v,q)) + dc(u,du,v)
 
-# If the stiffness term ($a(t, \cdot, \cdot)$) had been constant in time, we could have set `constant_forms=(true, true)`.
+# With the functions `res`, and `jac` representing the weak residual and the Jacobian, we build the nonlinear FE problem:
+op = FEOperator(res,jac,X,Y)
 
-# ## Transient solver
+# ## Nonlinear solver phase
+#
+# To finally solve the problem, we consider the same nonlinear solver as previously considered for the  $p$-Laplacian equation.
 
-# Once we have defined the FE operator, we proceed with the definition of the ODE solver, i.e. the scheme that will be used for the integration in time. In this tutorial, we use the `ThetaMethod` with $\theta = 1/2$, resulting in a second-order scheme. The `ThetaMethod` function receives a solver for systems of equations, the time step size $\Delta t$ (constant) and the value of $\theta \in [0, 1]$. Since the ODE is linear the systems of equation that will arise in the time-marching scheme will be linear so we can provide `ThetaMethod` with a linear solver.
+nls = NLSolver(
+  show_trace=true, method=:newton, linesearch=BackTracking())
+solver = FESolver(nls)
 
-ls = LUSolver()
-Δt = 0.05
-θ = 0.5
-solver = ThetaMethod(ls, Δt, θ)
+# In this example, we solve the problem without providing an initial guess (a default one equal to zero will be generated internally)
 
-# Gridap also implements explicit and diagonally-implicit Runge-Kutta schemes. One can access the full list of available Butcher tableaus through the exported constant `available_tableaus`. There are also constructors for explicit 2- and 3-stage schemes: `EXRK22(α)` and `EXRK33(α, β)`, `EXRK33_1(α)`, `EXRK33_2(α)` respectively, and diagonally-implicit 1- and 2-stage schemes: `SDIRK11(α)`, `SDIRK12()`, `SDIRK22(α, β, γ)`, `SDIRK23(λ)`. See the documentation of [Runge-Kutta schemes in Gridap](https://gridap.github.io/Gridap.jl/dev/ODEs/#Runge-Kutta) for a description of the corresponding tableaus. For example, one could have chosen a two-stage singly-diagonally-implicit scheme (of order 2) as follows.
-# tableau = :SDIRK_2_2
-# solver_rk = RungeKutta(ls, ls, Δt, tableau)
+uh, ph = solve(solver,op)
 
-# Let $t_{F} > t_{0}$ be a final time, until when we want to evolve the problem. We define the solution using the `solve` function, giving the ODE solver, the transient FE operator, the initial and final times, and the initial solution. To construct the initial condition we interpolate the initial function $u_{0}$ onto the FE space $U_{g}$ at the initial time. In our case, $u_{0}$ is simply $g(t_{0})$.
+# Finally, we write the results for visualization (see next figure).
 
-t0, tF = 0.0, 10.0
-uh0 = interpolate_everywhere(g(t0), Ug(t0))
-uh = solve(solver, op, t0, tF, uh0)
+writevtk(Ωₕ,"ins-results",cellfields=["uh"=>uh,"ph"=>ph])
 
-# ## Postprocessing
-
-# We highlight that `uh` is an iterable function and the result at each time step is only computed lazily when iterating over it. We can post-process the results and generate the corresponding `vtk` files using the `createpvd` and `createvtk` functions. The former will create a `.pvd` file with the collection of `.vtu` files saved at each time step by `createvtk`. The computation of the problem solutions will be triggered in the following loop:
-
-tmpStr = (@__DIR__)*"/tmp"
-
-if !isdir(tmpStr)
-  mkdir(tmpStr)
-end
-
-createpvd(tmpStr * "/results") do pvd
-  pvd[0] = createvtk(Ω, tmpStr * "/results_0" * ".vtu", cellfields=["u" => uh0])
-  for (tn, uhn) in uh
-    pvd[tn] = createvtk(Ω, tmpStr * "/results_$tn" * ".vtu", cellfields=["u" => uhn])
-  end
-end
-
-# ![](../assets/transient_linear/result.gif)
+# ![](../assets/inc_navier_stokes/ins_solution.png)
+#
+#  ## References
+#
+#  [1] H. C. Elman, D. J. Silvester, and A. J. Wathen. *Finite elements and fast iterative solvers: with applications in incompressible fluid dynamics*. Oxford University Press, 2005.

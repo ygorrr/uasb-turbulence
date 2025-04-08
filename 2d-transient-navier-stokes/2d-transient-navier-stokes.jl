@@ -14,18 +14,18 @@ add_tag_from_tags!(labels,"walls",[1,2,3,4,5,7])
 
 order = 2
 reffeᵤ = ReferenceFE(lagrangian, VectorValue{2, Float64}, order)
-V = TestFESpace(model, reffeᵤ, conformity=:H1, labels=labels, dirichlet_tags=["inlet", "outlet", "walls"])
+V = TestFESpace(model, reffeᵤ, conformity=:H1, labels=labels, dirichlet_tags=["inlet", "walls"])
 
 reffeₚ = ReferenceFE(lagrangian, Float64, order-1; space=:P)
-Q = TestFESpace(model, reffeₚ, conformity=:L2, constraint=:zeromean)
+Q = TestFESpace(model, reffeₚ, conformity=:L2, constraint=:zeromean, dirichlet_tags=["outlet"])
 
 # With the options `:Lagrangian`, `space=:P`, `valuetype=Float64`, and `order=order-1`, we select the local polynomial space $P_{k-1}(T)$ on the cells $T\in\mathcal{T}$. With the symbol `space=:P` we specifically chose a local Lagrangian interpolation of type "P". Without using `space=:P`, would lead to a local Lagrangian of type "Q" since this is the default for quadrilateral or hexahedral elements. On the other hand, `constraint=:zeromean` leads to a FE space, whose functions are constrained to have mean value equal to zero, which is just what we need for the pressure space. With these objects, we build the trial multi-field FE spaces
 
-inletVelocity = VectorValue(1,0)
-wallVelocity = VectorValue(0,0)
-outletPressure = 0
-U = TrialFESpace(V, [inletVelocity, outletPressure, wallVelocity])
-P = TrialFESpace(Q)
+inletVelocity = x -> VectorValue(1.0, 0.0)
+wallVelocity = x -> VectorValue(0.0, 0.0)
+outletPressure = x -> 0.0
+U = TransientTrialFESpace(V, [inletVelocity, wallVelocity])
+P = TransientTrialFESpace(Q, [outletPressure])
 
 Y = MultiFieldFESpace([V, Q])
 X = MultiFieldFESpace([U, P])

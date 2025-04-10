@@ -15,6 +15,5 @@ A componente vertical da velocidade tem comportamento anômalo no início do dom
 ![](/2d-steady-state-navier-stokes/speed-profile-pictures/speed-profile-100x100.png)
 ![](/2d-steady-state-navier-stokes/speed-profile-pictures/speed-profile-250x250.png)
 ![](/2d-steady-state-navier-stokes/speed-profile-pictures/speed-profile-250x50.png)
-![](/2d-steady-state-navier-stokes/speed-profile-pictures/speed-profile-500x100.png)
 
 Para que a simulação com uma malha $500 \times 100$ convirja, é necessário aumentar o grau dos polinômios interpoladores de 2 para 3. Não há muito ganho de precisão quando comparado à malha de $250 \times 50$, mas o perfil da componente vertical fica mais suave.

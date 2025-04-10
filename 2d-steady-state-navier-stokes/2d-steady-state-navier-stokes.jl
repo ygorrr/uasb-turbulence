@@ -12,7 +12,7 @@ using LineSearches: BackTracking
 const Re = 10.0
 
 # --- Parâmetros de domínio e malha ---
-n = 100
+n = 50
 domainLength = 10.0
 domainHeight = 1.0
 domain = (0, domainLength, 0, domainHeight)
@@ -31,7 +31,7 @@ add_tag_from_tags!(labels,"inlet",[7,])
 add_tag_from_tags!(labels,"outlet",[8,])
 add_tag_from_tags!(labels,"walls",[1,2,3,4,5,6])
 
-order = 3
+order = 2
 reffeᵤ = ReferenceFE(lagrangian, VectorValue{2, Float64}, order)
 V = TestFESpace(model, reffeᵤ, conformity=:H1, labels=labels, dirichlet_tags=["inlet", "walls"])
 

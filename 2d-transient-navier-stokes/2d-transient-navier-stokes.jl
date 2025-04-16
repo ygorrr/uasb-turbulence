@@ -85,8 +85,8 @@ u_ht = solve(solver, op, t0, tF, X0)
 # uh, ph = solve(solver, op, t0, tF, X0)
 # uh, ph = solve(solver,op)
 
-it = 0
-writevtk(Ωₕ,(@__DIR__)*"/ins-results$it.vtu",cellfields=["uh"=>uh,"ph"=>ph])
+# it = 0
+# writevtk(Ωₕ,(@__DIR__)*"/ins-results$it.vtu",cellfields=["uh"=>uh,"ph"=>ph])
 
 # for (u_h, t) in u_ht
 #   global it
@@ -99,11 +99,11 @@ if !isdir((@__DIR__)*"/tmp")
   mkdir((@__DIR__)*"/tmp")
 end
 
-createpvd("results") do pvd
+createpvd((@__DIR__)*"/results") do pvd
   uh0, ph0 = X0
   pvd[0] = createvtk(Ωₕ, (@__DIR__)*"/tmp/results_0" * ".vtu", cellfields=["u" => uh0, "p" => ph0])
-  for (tn, u_hn) in uh
+  for (tn, u_hn) in u_ht
     uh, ph = u_hn
-    pvd[tn] = createvtk(Ωₕ, (@__DIR__)*"/tmp/results_$tn" * ".vtu", cellfields=["u" => uhn, "p" => phn])
+    pvd[tn] = createvtk(Ωₕ, (@__DIR__)*"/tmp/results_$tn" * ".vtu", cellfields=["u" => uh, "p" => ph])
   end
 end

@@ -24,7 +24,8 @@ wallVelocity(t) = x -> VectorValue(0, 0)
 outletPressure(t) = x -> 0
 
 #  --- Condição inicial ---
-
+u0(t) = x -> VectorValue(0.0, 0.0)
+p0(t) = x -> 0.0
 
 model = CartesianDiscreteModel(domain,partition)
 # writevtk(model, (@__DIR__)*"/model")
@@ -54,15 +55,18 @@ dΩ = Measure(Ωₕ,degree)
 conv(u,∇u) = Re*(∇u')⋅u
 dconv(du,∇du,u,∇u) = conv(u,∇du)+conv(du,∇u)
 
+m(t, dtu, v) = ∫( v⋅dtu )dΩ
+
 a((u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - (∇⋅v)*p + q*(∇⋅u) )dΩ
 
 c(u,v) = ∫( v⊙(conv∘(u,∇(u))) )dΩ
 dc(u,du,v) = ∫( v⊙(dconv∘(du,∇(du),u,∇(u))) )dΩ
 
-res((u,p),(v,q)) = a((u,p),(v,q)) + c(u,v)
+res(t, (u,p), (v,q)) = m(t, u, v) + a((u,p),(v,q)) + c(u,v)
 jac((u,p),(du,dp),(v,q)) = a((du,dp),(v,q)) + dc(u,du,v)
 
-op = TransientFEOperator(res,jac,X,Y)
+# op = TransientFEOperator(res,jac,X,Y)
+op = TransientFEOperator(res,X,Y)
 
 nls = NLSolver(
   show_trace=true, method=:newton, linesearch=BackTracking()
@@ -73,9 +77,33 @@ nls = NLSolver(
 solver = ThetaMethod(nls, Δt, θ)
 # solver = FESolver(nls)
 
-t0, tF = 0.0, 10.0
-uh0 = interpolate_everywhere(g(t0), Ug(t0))
-uh, ph = solve(solver, op, t0, tF, uh0)
+t0, tF = 0.0, 1.0
+# uh0 = interpolate_everywhere(u0(t0), U(t0))
+# ph0 = interpolate_everywhere(p0(t0), P(t0))
+X0 = interpolate_everywhere([u0(0), p0(0)], X(t0))
+u_ht = solve(solver, op, t0, tF, X0)
+# uh, ph = solve(solver, op, t0, tF, X0)
 # uh, ph = solve(solver,op)
 
-writevtk(Ωₕ,(@__DIR__)*"/ins-results",cellfields=["uh"=>uh,"ph"=>ph])
+it = 0
+writevtk(Ωₕ,(@__DIR__)*"/ins-results$it.vtu",cellfields=["uh"=>uh,"ph"=>ph])
+
+# for (u_h, t) in u_ht
+#   global it
+#   it += 1
+#   uh, ph = u_h
+#   writevtk(Ωₕ,(@__DIR__)*"/ins-results$it.vtu",cellfields=["uh"=>uh,"ph"=>ph])
+# end
+
+if !isdir((@__DIR__)*"/tmp")
+  mkdir((@__DIR__)*"/tmp")
+end
+
+createpvd("results") do pvd
+  uh0, ph0 = X0
+  pvd[0] = createvtk(Ωₕ, (@__DIR__)*"/tmp/results_0" * ".vtu", cellfields=["u" => uh0, "p" => ph0])
+  for (tn, u_hn) in uh
+    uh, ph = u_hn
+    pvd[tn] = createvtk(Ωₕ, (@__DIR__)*"/tmp/results_$tn" * ".vtu", cellfields=["u" => uhn, "p" => phn])
+  end
+end

@@ -19,7 +19,7 @@ domain = (0, domainLength, 0, domainHeight)
 partition = (5*n, n)
 
 #  --- Condições de contorno ---
-inletVelocity(t) = x -> VectorValue(10.0, 0)
+inletVelocity(t) = x -> VectorValue(1.0 - exp(-t), 0)
 wallVelocity(t) = x -> VectorValue(0, 0)
 outletPressure(t) = x -> 0
 
@@ -55,15 +55,15 @@ dΩ = Measure(Ωₕ,degree)
 conv(u,∇u) = Re*(∇u')⋅u
 dconv(du,∇du,u,∇u) = conv(u,∇du)+conv(du,∇u)
 
-m(t, dtu, v) = ∫( v⋅dtu )dΩ
+m(t, dtu, v) = ∫( Re*v⋅dtu )dΩ
 
-a((u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - (∇⋅v)*p + q*(∇⋅u) )dΩ
+a(t, (u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - (∇⋅v)*p + q*(∇⋅u) )dΩ
 
-c(u,v) = ∫( v⊙(conv∘(u,∇(u))) )dΩ
-dc(u,du,v) = ∫( v⊙(dconv∘(du,∇(du),u,∇(u))) )dΩ
+c(t, u,v) = ∫( v⊙(conv∘(u,∇(u))) )dΩ
+dc(t, u,du,v) = ∫( v⊙(dconv∘(du,∇(du),u,∇(u))) )dΩ
 
-res(t, (u,p), (v,q)) = m(t, u, v) + a((u,p),(v,q)) + c(u,v)
-jac((u,p),(du,dp),(v,q)) = a((du,dp),(v,q)) + dc(u,du,v)
+res(t, (u,p), (v,q)) = m(t, u, v) + a(t,(u,p),(v,q)) + c(t,u,v)
+jac(t,(u,p),(du,dp),(v,q)) = a(t,(du,dp),(v,q)) + dc(t,u,du,v)
 
 # op = TransientFEOperator(res,jac,X,Y)
 op = TransientFEOperator(res,X,Y)
@@ -77,7 +77,7 @@ nls = NLSolver(
 solver = ThetaMethod(nls, Δt, θ)
 # solver = FESolver(nls)
 
-t0, tF = 0.0, 1.0
+t0, tF = 0.0, 1.5
 # uh0 = interpolate_everywhere(u0(t0), U(t0))
 # ph0 = interpolate_everywhere(p0(t0), P(t0))
 X0 = interpolate_everywhere([u0(0), p0(0)], X(t0))
@@ -99,7 +99,7 @@ if !isdir((@__DIR__)*"/tmp")
   mkdir((@__DIR__)*"/tmp")
 end
 
-createpvd((@__DIR__)*"/results") do pvd
+createpvd((@__DIR__)*"/tmp/results") do pvd
   uh0, ph0 = X0
   pvd[0] = createvtk(Ωₕ, (@__DIR__)*"/tmp/results_0" * ".vtu", cellfields=["u" => uh0, "p" => ph0])
   for (tn, u_hn) in u_ht

@@ -3,6 +3,7 @@ using LineSearches: BackTracking
 
 g = VectorValue(0.0, -9.81)  # Aceleração da gravidade
 nu = 1.0e-3  # Viscosidade cinemática
+ρ = 1.0  # Densidade do fluido
 
 #  --- Formas compactas ---
 a(u,v,D) = ∫( D*∇(u)⊙∇(v) )dΩ
@@ -20,12 +21,19 @@ u4 -> epsilon
 minVal = 1e-8 # Constante de proteção contra divisão por zero
 
 Cμ = 0.09  # Constante de turbulência
-nuEddy(u3, u4) = @. Cμ * u3^2 / max(u4, minVal)
+Cϵ1 = 1.44  # Constante de produção de epsilon
+Cϵ2 = 1.92  # Constante de destruição de epsilon
+σk = 1.0  # Constante de difusão de k
+σϵ = 1.3  # Constante de difusão de epsilon
+nuEddy(u3, u4) = Cμ * u3 * u3 / max([u4, minVal])
+kProduction(∇u1, u3, u4) = - (2/3) * u3 + nuEddy(u3, u4) * (∇u1 + ∇u1') ⊙ ∇u1
+epsilonProduction(∇u1, u3, u4) = Cϵ1 * kProduction(∇u1, u3, u4) * u4 / max([u3, minVal])
+epsilonDestruction(u3, u4) = Cϵ2 * u4 * u4 / max([u3, minVal])
 
 # Equação de Navier-Stokes 
 resNS(u1, u2, u3, u4, v1) = 
   c(u1, v1, u1) +
-  ∫( (nu + nuEddy(u3, u4)) * ∇(u1)⊙∇(v1) )dΩ + 
+  ∫( (nu + nuEddy.(u3,u4)) * ∇(u1)⊙∇(v1) )dΩ + 
   ∫( v1 ⋅ (∇(u2) / ρ - g) )dΩ
 
 # Equação da continuidade
@@ -35,14 +43,14 @@ resCont(u1, v2) =
 # Equação de k
 resk(u1, u3, u4, v3) = 
   c(u3, v3, u1) +
-  ∫( nuEddy(u3, u4) / σk * ∇(u3)⊙∇(v3) )dΩ -
-  ∫( v3 * (source_u3 - u4) )dΩ
+  ∫( (nuEddy.(u3,u4)) / σk * ∇(u3)⊙∇(v3) )dΩ -
+  ∫( v3 * (kProduction.(∇(u1),u3,u4) - u4) )dΩ
 
 # Equação de epsilon
 resEpsilon(u1, u3, u4, v4) =
   c(u4, v4, u1) +
-  ∫( nuEddy(u3, u4) / σϵ * ∇(u4)⊙∇(v4) )dΩ -
-  ∫( v4 * (Cϵ1 * source_u3 * u4 / max(u3, minVal)) - Cϵ2 * u4^2 / max(u3, minVal) )dΩ
+  ∫( (nuEddy.(u3,u4)) / σϵ * ∇(u4)⊙∇(v4) )dΩ -
+  ∫( v4 * (epsilonProduction.(∇(u1),u3,u4) - epsilonDestruction.(u3,u4)) )dΩ
 
 res((u1, u2, u3, u4), (v1, v2, v3, v4)) =
   resNS(u1, u2, u3, u4, v1) +
@@ -113,19 +121,6 @@ X = MultiFieldFESpace([U_u1, U_u2, U_u3, U_u4])
 degree = 2*order
 Ω = Triangulation(model)
 dΩ = Measure(Ω,degree)
-
-# conv(u,∇u) = Re*(∇u')⋅u
-# dconv(du,∇du,u,∇u) = conv(u,∇du)+conv(du,∇u)
-
-# m(t, dtu, v) = ∫( Re*v⋅dtu )dΩ
-
-# a(t, (u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - (∇⋅v)*p + q*(∇⋅u) )dΩ
-
-# c(t, u,v) = ∫( v⊙(conv∘(u,∇(u))) )dΩ
-# dc(t, u,du,v) = ∫( v⊙(dconv∘(du,∇(du),u,∇(u))) )dΩ
-
-# res(t, (u,p), (v,q)) = m(t, u, v) + a(t,(u,p),(v,q)) + c(t,u,v)
-# jac(t,(u,p),(du,dp),(v,q)) = a(t,(du,dp),(v,q)) + dc(t,u,du,v)
 
 op = FEOperator(res,X,Y)
 

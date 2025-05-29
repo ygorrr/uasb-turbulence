@@ -25,15 +25,15 @@ Cϵ1 = 1.44  # Constante de produção de epsilon
 Cϵ2 = 1.92  # Constante de destruição de epsilon
 σk = 1.0  # Constante de difusão de k
 σϵ = 1.3  # Constante de difusão de epsilon
-nuEddy(u3, u4) = @. Cμ * u3 * u3 / max(u4, minVal)
-kProduction(∇u1, u3, u4) = @. - (2/3) * u3 + nuEddy(u3, u4) * (∇u1 + ∇u1') ⊙ ∇u1
-epsilonProduction(∇u1, u3, u4) = @. Cϵ1 * kProduction(∇u1, u3, u4) * u4 / max(u3, minVal)
-epsilonDestruction(u3, u4) = @. Cϵ2 * u4 * u4 / max(u3, minVal)
+nuEddy(u3, u4) = Cμ * u3 * u3 / max(u4, minVal)
+kProduction(∇u1, u3, u4) = - (2/3) * u3 + nuEddy(u3, u4) * (∇u1 + ∇u1') ⊙ ∇u1
+epsilonProduction(∇u1, u3, u4) = Cϵ1 * kProduction(∇u1, u3, u4) * u4 / max(u3, minVal)
+epsilonDestruction(u3, u4) = Cϵ2 * u4 * u4 / max(u3, minVal)
 
 # Equação de Navier-Stokes 
 resNS(u1, u2, u3, u4, v1) = 
   c(u1, v1, u1) +
-  ∫( (nu + nuEddy.(u3,u4)) * ∇(u1)⊙∇(v1) )dΩ + 
+  ∫( (nu + nuEddy ∘ (u3,u4)) * ∇(u1)⊙∇(v1) )dΩ + 
   ∫( v1 ⋅ (∇(u2) / ρ - g) )dΩ
 
 # Equação da continuidade
@@ -43,14 +43,14 @@ resCont(u1, v2) =
 # Equação de k
 resk(u1, u3, u4, v3) = 
   c(u3, v3, u1) +
-  ∫( (nuEddy.(u3,u4)) / σk * ∇(u3)⊙∇(v3) )dΩ -
-  ∫( v3 * (kProduction.(∇(u1),u3,u4) - u4) )dΩ
+  ∫( (nuEddy ∘ (u3,u4)) / σk * ∇(u3)⊙∇(v3) )dΩ -
+  ∫( v3 * (kProduction ∘ (∇(u1),u3,u4) - u4) )dΩ
 
 # Equação de epsilon
 resEpsilon(u1, u3, u4, v4) =
   c(u4, v4, u1) +
-  ∫( (nuEddy.(u3,u4)) / σϵ * ∇(u4)⊙∇(v4) )dΩ -
-  ∫( v4 * (epsilonProduction.(∇(u1),u3,u4) - epsilonDestruction.(u3,u4)) )dΩ
+  ∫( (nuEddy ∘ (u3,u4)) / σϵ * ∇(u4)⊙∇(v4) )dΩ -
+  ∫( v4 * (epsilonProduction ∘ (∇(u1),u3,u4) - epsilonDestruction ∘ (u3,u4)) )dΩ
 
 res((u1, u2, u3, u4), (v1, v2, v3, v4)) =
   resNS(u1, u2, u3, u4, v1) +
@@ -100,7 +100,7 @@ V_u1 = TestFESpace(model, reffe_u1, conformity=:H1, labels=labels, dirichlet_tag
 
 # Espaço de funções de teste para a pressão
 reffe_u2 = ReferenceFE(lagrangian, Float64, order-1)
-V_u2 = TestFESpace(model, reffe_u2, conformity=:L2, dirichlet_tags=["inlet"])
+V_u2 = TestFESpace(model, reffe_u2, conformity=:L2, dirichlet_tags=["anchor"])
 
 # Espaço de funções de teste para k
 reffe_u3 = ReferenceFE(lagrangian, Float64, order)

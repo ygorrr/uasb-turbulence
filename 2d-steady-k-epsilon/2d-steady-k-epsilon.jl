@@ -25,10 +25,10 @@ Cϵ1 = 1.44  # Constante de produção de epsilon
 Cϵ2 = 1.92  # Constante de destruição de epsilon
 σk = 1.0  # Constante de difusão de k
 σϵ = 1.3  # Constante de difusão de epsilon
-nuEddy(u3, u4) = Cμ * u3 * u3 / max([u4, minVal])
-kProduction(∇u1, u3, u4) = - (2/3) * u3 + nuEddy(u3, u4) * (∇u1 + ∇u1') ⊙ ∇u1
-epsilonProduction(∇u1, u3, u4) = Cϵ1 * kProduction(∇u1, u3, u4) * u4 / max([u3, minVal])
-epsilonDestruction(u3, u4) = Cϵ2 * u4 * u4 / max([u3, minVal])
+nuEddy(u3, u4) = @. Cμ * u3 * u3 / max(u4, minVal)
+kProduction(∇u1, u3, u4) = @. - (2/3) * u3 + nuEddy(u3, u4) * (∇u1 + ∇u1') ⊙ ∇u1
+epsilonProduction(∇u1, u3, u4) = @. Cϵ1 * kProduction(∇u1, u3, u4) * u4 / max(u3, minVal)
+epsilonDestruction(u3, u4) = @. Cϵ2 * u4 * u4 / max(u3, minVal)
 
 # Equação de Navier-Stokes 
 resNS(u1, u2, u3, u4, v1) = 

@@ -29,6 +29,10 @@ nuEddy(u3, u4) = Cμ * u3 * u3 / max(u4, minVal)
 kProduction(∇u1, u3, u4) = - (2/3) * u3 + nuEddy(u3, u4) * (∇u1 + ∇u1') ⊙ ∇u1
 epsilonProduction(∇u1, u3, u4) = Cϵ1 * kProduction(∇u1, u3, u4) * u4 / max(u3, minVal)
 epsilonDestruction(u3, u4) = Cϵ2 * u4 * u4 / max(u3, minVal)
+nuEddy(u3, u4) = Cμ * u3 * u3 / max(u4, minVal)
+kProduction(∇u1, u3, u4) = - (2/3) * u3 + nuEddy(u3, u4) * (∇u1 + ∇u1') ⊙ ∇u1
+epsilonProduction(∇u1, u3, u4) = Cϵ1 * kProduction(∇u1, u3, u4) * u4 / max(u3, minVal)
+epsilonDestruction(u3, u4) = Cϵ2 * u4 * u4 / max(u3, minVal)
 
 # Equação de Navier-Stokes 
 resNS(u1, u2, u3, u4, v1) = 
@@ -100,7 +104,7 @@ V_u1 = TestFESpace(model, reffe_u1, conformity=:H1, labels=labels, dirichlet_tag
 
 # Espaço de funções de teste para a pressão
 reffe_u2 = ReferenceFE(lagrangian, Float64, order-1)
-V_u2 = TestFESpace(model, reffe_u2, conformity=:L2, dirichlet_tags=["inlet"])
+V_u2 = TestFESpace(model, reffe_u2, conformity=:L2, dirichlet_tags=["anchor"])
 
 # Espaço de funções de teste para k
 reffe_u3 = ReferenceFE(lagrangian, Float64, order)

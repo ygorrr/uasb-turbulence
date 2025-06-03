@@ -26,14 +26,14 @@ Cϵ2 = 1.92  # Constante de destruição de epsilon
 σk = 1.0  # Constante de difusão de k
 σϵ = 1.3  # Constante de difusão de epsilon
 nuEddy(u3, u4) = 0*Cμ * u3 * u3 / max(u4, minVal)
-kProduction(∇u1, u3, u4) = - (2/3) * u3 + nuEddy(u3, u4) * (∇u1 + ∇u1') ⊙ ∇u1
+kProduction(∇u1, u3, u4) = nuEddy(u3, u4) * (∇u1 + ∇u1') ⊙ ∇u1
 epsilonProduction(∇u1, u3, u4) = Cϵ1 * kProduction(∇u1, u3, u4) * u4 / max(u3, minVal)
 epsilonDestruction(u3, u4) = Cϵ2 * u4 * u4 / max(u3, minVal)
 
 # Equação de Navier-Stokes 
-resNS(u1, u2, u3, u4, v1) = 
+resNS(u1, u2, v1) = 
   c(u1, v1, u1) +
-  ∫( (nu + nuEddy∘(u3,u4)) * ∇(u1)⊙∇(v1) )dΩ + 
+  ∫( (nu ) * ∇(u1)⊙∇(v1) )dΩ + 
   ∫( v1 ⋅ (∇(u2) / ρ - g) )dΩ
 
 # Equação da continuidade
@@ -41,22 +41,22 @@ resCont(u1, v2) =
   ∫( v2 * (∇ ⋅ u1) )dΩ
 
 # Equação de k
-resk(u1, u3, u4, v3) = 0
+resk(u1, u3, u4, v3) = ∫(0)dΩ
   # c(u3, v3, u1) +
   # ∫( (nu + nuEddy∘(u3,u4)) / σk * ∇(u3)⊙∇(v3) )dΩ -
   # ∫( v3 * (kProduction∘(∇(u1),u3,u4) - u4) )dΩ
 
 # Equação de epsilon
-resEpsilon(u1, u3, u4, v4) = 0
+resEpsilon(u1, u3, u4, v4) = ∫(0)dΩ
   # c(u4, v4, u1) +
   # ∫( (nu + nuEddy∘(u3,u4)) / σϵ * ∇(u4)⊙∇(v4) )dΩ -
   # ∫( v4 * (epsilonProduction∘(∇(u1),u3,u4) - epsilonDestruction∘(u3,u4)) )dΩ
 
-res((u1, u2, u3, u4), (v1, v2, v3, v4)) =
-  resNS(u1, u2, u3, u4, v1) +
-  resCont(u1, v2) +
-  resk(u1, u3, u4, v3) +
-  resEpsilon(u1, u3, u4, v4)
+res((u1, u2), (v1, v2)) =
+  resNS(u1, u2, v1) +
+  resCont(u1, v2) 
+  # resk(u1, u3, u4, v3) +
+  # resEpsilon(u1, u3, u4, v4)
 
 # --- Malha ---
 n = 50
@@ -85,6 +85,13 @@ Uref = 1.0
 
 inlet_velocity(x) = VectorValue(0, 1.0*(1.0-sqrt(x[2]/Ly))*(((0.5*(1.0-(cos(1*2*pi*x[1])))+0.0*rand()) > 0.89 ? 1.0 : 0.0 )) + sqrt(x[2]/Ly))
 
+function gaussian_vector(x::VectorValue{2,Float64}; x0=0.5, sigma=0.1, amplitude=1.0)
+    # x[1]: coordenada x, x[2]: coordenada y
+    gauss = amplitude * exp(-((x[1] - x0)^2) / (2*sigma^2))
+    return VectorValue(0.0, gauss)
+end
+
+inlet_velocity(x) = gaussian_vector(x; x0=0.5, sigma=0.1, amplitude=1.0)
 
 # using Plots
 # x=collect(range(0,1,100))
@@ -129,8 +136,11 @@ U_u2 = TrialFESpace(V_u2, outlet_pressure)
 U_u3 = TrialFESpace(V_u3, inlet_k)
 U_u4 = TrialFESpace(V_u4, inlet_ϵ)
 
-Y = MultiFieldFESpace([V_u1, V_u2, V_u3, V_u4])
-X = MultiFieldFESpace([U_u1, U_u2, U_u3, U_u4])
+# Y = MultiFieldFESpace([V_u1, V_u2, V_u3, V_u4])
+# X = MultiFieldFESpace([U_u1, U_u2, U_u3, U_u4])
+
+Y = MultiFieldFESpace([V_u1, V_u2])
+X = MultiFieldFESpace([U_u1, U_u2])
 
 degree = 2*order
 Ω = Triangulation(model)
@@ -144,6 +154,8 @@ nls = NLSolver(
 
 solver = FESolver(nls)
 
-uh, ph, kh, epsilonh = solve(solver,op)
+# uh, ph, kh, epsilonh = solve(solver,op)
+uh, ph = solve(solver,op)
 
-writevtk(Ω,(@__DIR__)*"/results",cellfields=["uh"=>uh,"ph"=>ph,"kh"=>kh,"epsilonh"=>epsilonh])
+# writevtk(Ω,(@__DIR__)*"/results",cellfields=["uh"=>uh,"ph"=>ph,"kh"=>kh,"epsilonh"=>epsilonh])
+writevtk(Ω,(@__DIR__)*"/results",cellfields=["uh"=>uh,"ph"=>ph])

@@ -1,15 +1,33 @@
 using Gridap
+using LineSearches: BackTracking
+using Plots
+
+uasbDiam = 1.8 # metros
+uasbHeight = 2.0 # metros
+uasbArea = π * (uasbDiam/2)^2 # metros quadrados
+hdt = 6*60*60 # 6 horas em segundos
+volFlowRate = uasbArea * uasbHeight / hdt # metros cúbicos por segundo
+meanVelocity = volFlowRate / uasbArea # metros por segundo
+molecularViscosity = 1.0e-3 # viscosidade cinemática do fluido (água) em m²/s
+
+Re_uasb = meanVelocity * uasbDiam / molecularViscosity # Número de Reynolds do UASB
+
+jetDiameter = 0.05 # metros
+jetArea = π * (jetDiameter/2)^2 # metros quadrados
+meanJetVelocity = volFlowRate / jetArea # metros por segundo
+
+Re_jet = meanJetVelocity * jetDiameter / molecularViscosity # Número de Reynolds do jato
 
 n = 30
-Lx = 1.0
-Ly = 2.0
-domain = (0,Lx,0,Ly)
-partition = (n,Ly*n)
-model = CartesianDiscreteModel(domain,partition;isperiodic=(true,false))
+Lx = 10.0
+Ly = 2.0 * Lx
+domain = (-Lx/2, Lx/2, 0, Ly)
+partition = (n, 2*n)
+model = CartesianDiscreteModel(domain, partition; isperiodic=(true,false))
 
 labels = get_face_labeling(model)
-add_tag_from_tags!(labels,"top",[6,])
-add_tag_from_tags!(labels,"bottom",[5,])
+add_tag_from_tags!(labels, "top", [6,])
+add_tag_from_tags!(labels, "bottom", [5,])
 
 #=
 Incógnitas:
@@ -24,6 +42,7 @@ Espaços de de funções de ensaio: S1, S2, S3, S4, S5
 =#
 
 order = 2
+
 reffe_u1 = ReferenceFE(lagrangian, VectorValue{2, Float64}, order)
 V1 = TestFESpace(model, reffe_u1, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
 
@@ -43,26 +62,39 @@ V5 = TestFESpace(model, reffe_u5, conformity=:H1, labels=labels, dirichlet_tags=
 # Condições de contorno
 # -----------------------
 
-function u1BC(x, t::Real)
+function jetProfile(x, t::Real)
   global Lx, Ly
-  ω = 2.0
-  treshold = 0.89
-  velocityAmplitude = 1.0
-  velocityY = 0.0
+  local ω = 3.0
+  local treshold = 0.6
+  local velocityAmplitude = 1.0
+  local velocityY = 0.0
   
-  if -cos(2π*ω*x[1]/Lx) >= treshold
-    velocityY = velocityAmplitude * (1 - sqrt(x[2]/Ly))
-  end
+  x, y = x[1], x[2]
+  
+  # if -cos(2π*ω*x[1]/Lx) >= treshold
+  #   velocityY = velocityAmplitude * (1 - sqrt(x[2]/Ly))
+  # end
+
+  # velocityY = velocityAmplitude * (1+tanh(10*(x+0.5))) * (1-tanh(10*(x-0.5)))/4.0 * exp(- 5.0* y/Ly)
+  velocityY = velocityAmplitude * (tanh(10*(x+0.5)) * (-tanh(10*(x-0.5))) + 1) * exp(- 5.0* y/Ly)
 
   return VectorValue(0.0, velocityY)
 end
 
-u1BC(t::Real) = x -> u1BC(x,t)
-# u1IC(x, t::Real) = u1BC(x,t)
+using Plots
 
-# g1(x,t::Real) = VectorValue(0, 10.0 * (1.0-sqrt(x[2]/Ly)) * (
-#     (0.5 * (1.0 - (cos(1*2*pi*x[1]))) + 0.0*rand() ) > 0.99 ? 1.0 : 0.0
-#   ) + sqrt(x[2]/Ly))
+# Crie os pontos ao longo do eixo x (y = 0)
+xs = collect(range(-Lx/2, Lx/2, length=101))
+pontos = [VectorValue(xi, 0.0) for xi in xs]
+
+# Avalie o perfil do jato nesses pontos para um tempo t fixo (ex: t = 0.0)
+t = 0.0
+valores = [jetProfile(p, t)[2] for p in pontos]  # pega a componente y
+
+# Plote o perfil
+plot(xs, valores, xlabel="x", ylabel="Velocidade y", title="Perfil de Velocidade do Jato", label="jetProfile")
+
+u1BC(t::Real) = x -> jetProfile(x,t)
 
 u2BC(x, t::Real) = 0.0
 u2BC(t::Real) = x -> u2BC(x,t)
@@ -203,7 +235,6 @@ op = TransientFEOperator(res,X,Y)
 #
 # To finally solve the problem, we consider the same nonlinear solver as previously considered for the  $p$-Laplacian equation.
 
-using LineSearches: BackTracking
 nls = NLSolver(show_trace=true, method=:newton, linesearch=BackTracking(), iterations=20)
 
 # Then, we define the ODE solver. That is, the scheme that will be used for the time integration. In this tutorial we use the `ThetaMethod` with $\theta = 0.5$, resulting in a 2nd order scheme. The `ThetaMethod` function receives the linear solver, the time step size $\Delta t$ (constant) and the value of $\theta $.

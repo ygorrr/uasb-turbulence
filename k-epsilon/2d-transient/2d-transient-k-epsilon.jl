@@ -2,21 +2,23 @@ using Gridap
 using LineSearches: BackTracking
 using Plots
 
-uasbDiam = 1.8 # metros
-uasbHeight = 2.0 # metros
-uasbArea = π * (uasbDiam/2)^2 # metros quadrados
-hdt = 6*60*60 # 6 horas em segundos
-volFlowRate = uasbArea * uasbHeight / hdt # metros cúbicos por segundo
-meanVelocity = volFlowRate / uasbArea # metros por segundo
+uasbDiam = 1.8 # m
+uasbHeight = 2.0 # m
+uasbArea = π * (uasbDiam/2)^2 # m²
+HDT = 6*60*60 # 6 horas em segundos
+volFlowRate = uasbArea * uasbHeight / hdt # m³/s
+meanVelocity = volFlowRate / uasbArea # m/s
 molecularViscosity = 1.0e-3 # viscosidade cinemática do fluido (água) em m²/s
 
-Re_uasb = meanVelocity * uasbDiam / molecularViscosity # Número de Reynolds do UASB
+# Número de Reynolds do UASB
+Re_uasb = meanVelocity * uasbDiam / molecularViscosity 
 
-jetDiameter = 0.05 # metros
-jetArea = π * (jetDiameter/2)^2 # metros quadrados
-meanJetVelocity = volFlowRate / jetArea # metros por segundo
+jetDiameter = 0.05 # m
+jetArea = π * (jetDiameter/2)^2 # m²
+meanJetVelocity = volFlowRate / jetArea # m/s
 
-Re_jet = meanJetVelocity * jetDiameter / molecularViscosity # Número de Reynolds do jato
+# Número de Reynolds do jato
+Re_jet = meanJetVelocity * jetDiameter / molecularViscosity 
 
 n = 30
 Lx = 10.0
@@ -58,66 +60,100 @@ V4 = TestFESpace(model, reffe_u4, conformity=:H1, labels=labels, dirichlet_tags=
 reffe_u5 = ReferenceFE(lagrangian, Float64, order)
 V5 = TestFESpace(model, reffe_u5, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
 
-# -----------------------
-# Condições de contorno
-# -----------------------
+#=-----------------------
+  Condições iniciais e de contorno
+  -----------------------=#
 
-function jetProfile(x, t::Real)
-  global Lx, Ly
-  local ω = 3.0
-  local treshold = 0.6
-  local velocityAmplitude = 1.0
-  local velocityY = 0.0
-  
-  x, y = x[1], x[2]
-  
-  # if -cos(2π*ω*x[1]/Lx) >= treshold
-  #   velocityY = velocityAmplitude * (1 - sqrt(x[2]/Ly))
-  # end
-
-  # velocityY = velocityAmplitude * (1+tanh(10*(x+0.5))) * (1-tanh(10*(x-0.5)))/4.0 * exp(- 5.0* y/Ly)
-  velocityY = velocityAmplitude * (tanh(10*(x+0.5)) * (-tanh(10*(x-0.5))) + 1) * exp(- 5.0* y/Ly)
-
-  return VectorValue(0.0, velocityY)
+function singleJet(x)
+  global jetDiameter
+  local a = 75.0
+  local xTreshold = log(1999)/(2*a)
+  local amplitude = 1.0
+  Δx = -jetDiameter/2 + xTreshold
+  return amplitude * (tanh(a*(x-Δx)) * -tanh(a*(x+Δx)) + 1) / 2
 end
 
-using Plots
+function jetProfile(x, t::Real)
+  global xJets
+  local velocityY = 0.0
+  for xJet in xJets
+    velocityY += singleJet(x - xJet)
+  end
+  return velocityY
+end
 
-# Crie os pontos ao longo do eixo x (y = 0)
-xs = collect(range(-Lx/2, Lx/2, length=101))
-pontos = [VectorValue(xi, 0.0) for xi in xs]
+# Visualização do perfil de velocidade do jato
+begin
+  x = -1:0.001:1.0
+  xJets = [-1, -0.5, 0.0, 0.5, 1, 0.25]
+  jetContour = xJets[3] .+ [- jetDiameter / 2, jetDiameter / 2]
+  
+  plot(x, jetProfile.(x,0), xlabel="x", ylabel="Velocidade em y", title="Perfil de velocidade de jato", label="jetProfile", ylims=(-0.01,1.0))
+  
+  scatter!(jetContour, [0.0, 0.0], label="jetContour")
+end
 
-# Avalie o perfil do jato nesses pontos para um tempo t fixo (ex: t = 0.0)
-t = 0.0
-valores = [jetProfile(p, t)[2] for p in pontos]  # pega a componente y
-
-# Plote o perfil
-plot(xs, valores, xlabel="x", ylabel="Velocidade y", title="Perfil de Velocidade do Jato", label="jetProfile")
-
-u1BC(t::Real) = x -> jetProfile(x,t)
+u1BC(x, t::Real) = jetProfile(x,t)
+u1BC(t::Real) = x -> u1BC(x,t)
+u1IC(x, t::Real) = exp(-5.0 * x[2] / Ly) * jetProfile(x,t)
 
 u2BC(x, t::Real) = 0.0
 u2BC(t::Real) = x -> u2BC(x,t)
 u2IC(x, t::Real) = 0.0
 u2IC(t::Real) = x -> u2IC(x,t)
 
-u3BC(x, t::Real) = 1.0
+u3BC(x, t::Real) = jetProfile(x,t)
 u3BC(t::Real) = x -> u3BC(x,t)
 u3IC(x, t::Real) = 0.0
 u3IC(t::Real) = x -> u3IC(x,t)
 
-# Condições de Dirichlet para k e epsilon
-Uref = 1.0  # Velocidade de referência
-I = 0.05      # Intensidade de turbulência
-ell = 0.05    # Comprimento de mistura (tamanho do jato)
-u4BC(x, t::Real) = 500 #1.5 * (I * Uref)^2
+#=
+  Velocidade de referência, vel. média do jato
+=#
+# nJets = length(xJets)
+# Ujet = volFlowRate / nJets / jetArea
+# Uref = Ujet / Uchar
+Uref = 1.0
+
+#=
+  Intensidade de turbulência. Valores típicos:
+  Jato livre: 0.05 ~ 0.1
+  Escoamento altamente turbulento: até 0.2
+=#
+I = 0.1 
+
+#= 
+  Estimativa de k na saída do jato
+=#
+kEstimate = (3/2) * (I * Uref)^2
+
+u4BC(x, t::Real) = kEstimate * jetProfile(x,t)
 u4BC(t::Real) = x -> u4BC(x,t)
-u4IC(x, t::Real) = 0.0
+u4IC(x, t::Real) = 0.01 * kEstimate
 u4IC(t::Real) = x -> u4IC(x,t)
 
-u5BC(x, t::Real) = 1200 #(Cμ)^(3/4) * k_inlet^(3/2) / ell
+#= 
+  Estimativa dimensional de epsilon na saída do jato.
+  Supõe-se que u' ~ √k e que νₜ ~ u' * ℓ. Usando a relação entre k e ϵ:
+    ϵ = Cμ^(3/4) * k^(3/2) / ℓ
+  onde Cμ é uma constante de turbulência e ℓ é uma escala de comprimento. O expoente de Cμ é empírico e não vem diretamente da teoria.
+  ℓ pode ser estimada por uma fração do diâmetro do jato:
+    ℓ = α * φ
+  onde α é uma constante, tipicamente entre 0.07 e 0.1.
+=#
+α = 0.07
+ϵEstimate = Cμ^(3/4) * kEstimate^(3/2) / (α * jetDiameter)
+
+#= 
+  Estimativa baseada em argumentos de escala:
+    νₜ ~ Ujet * φ
+  Essa estimativa vem de argumentos de escala, supondo que as flutuações da velocidade e comprimento de mistura sejam proporcionais à velocidade média do jato e ao diâmetro do jato, ou seja, νₜ ~ u'ℓ ~ Ujet * φ.
+=#
+ϵEstimate = Cμ * kEstimate / Ujet / jetDiameter
+
+u5BC(x, t::Real) = ϵEstimate * jetProfile(x,t)
 u5BC(t::Real) = x -> u5BC(x,t)
-u5IC(x, t::Real) = 0.0
+u5IC(x, t::Real) = ϵEstimate * exp(-5.0 * x[2] / Ly) * jetProfile(x,t)
 u5IC(t::Real) = x -> u5IC(x,t)
 
 S1 = TransientTrialFESpace(V1, [u1BC])

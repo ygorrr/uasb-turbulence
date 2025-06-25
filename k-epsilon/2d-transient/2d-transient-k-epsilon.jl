@@ -8,7 +8,8 @@ using Plots
 β = 0.1 # Coeficiente de dilatação mássica
 ρ = 1.0  # Densidade do fluido
 nu = 1.0e-3 # Viscosidade cinemática do fluido (água) em m²/s
-g = VectorValue(0.0, -1.0)  # Vetor aceleração unitário
+g = 9.81 # Aceleração da gravidade em m/s²
+gHat = VectorValue(0.0, -1.0)  # Vetor aceleração unitário
 
 #=------------------------
   Constantes do modelo k-epsilon
@@ -32,7 +33,7 @@ meanVelocity = uasbHeight / HDT # m/s
 
 jetDiameter = 0.2 # m
 jetArea = π * (jetDiameter/2)^2 # m²
-xJets = [-2, 2]
+xJets = [-0.45, 0.45] # Posições dos jatos ao longo de x
 nJets = length(xJets) # Número de jatos
 meanJetVelocity = volFlowRate / (nJets * jetArea) # m/s
 
@@ -55,7 +56,7 @@ Re_jet = meanJetVelocity * jetDiameter / nu
 Re = Uc * Lc / nu
 # Re = 300
 Sc = 1.0
-# Ri = β*g*(Cref/Lref)/(Uref/Lref)^2
+# Ri = β*g*(Cc/Lc)/(Uc/Lc)^2
 Ri = 1e-1
 
 n = 50
@@ -117,7 +118,7 @@ function jetProfile(x, t::Real)
   # amplitude = 1.0 # Forçar amplitude para 1.0
   local velocityY = 0.0
   for xJet in xJets
-    velocityY += amplitude * unitJet(x[1] - xJet)
+    velocityY += amplitude * unitJet(x[1] - xJet / Lc)
   end
   return VectorValue(0.0, velocityY)
 end
@@ -126,7 +127,7 @@ function scalarProfile(x, t::Real)
   global xJets
   local scalarVal = 0.0
   for xJet in xJets
-    scalarVal += unitJet(x[1] - xJet)
+    scalarVal += unitJet(x[1] - xJet / Lc)
   end
   return scalarVal
 end
@@ -136,7 +137,7 @@ end
   Melhor comentar esse bloco begin/end se for rodar no cluster!
 ------------------------=#
 begin
-  jetContour = xJets[1] .+ [- jetDiameter / (2*Lc), jetDiameter / (2*Lc)]
+  jetContour = xJets[1]/Lc .+ [- jetDiameter / (2*Lc), jetDiameter / (2*Lc)]
   xRange = -Lx/2:0.001:Lx/2
   yComponents = []
   for x in xRange
@@ -247,7 +248,7 @@ resNS(t, u1, u2, u3, u4, u5, v1) =
   ∫( v1 ⋅ (∇(u1)' ⋅ u1) )dΩ +
   ∫( (1/Re + (nuT∘(u4,u5))) * ∇(v1)⊙∇(u1) )dΩ - 
   ∫( (∇ ⋅ v1) * u2 )dΩ -
-  ∫( Ri * (v1 ⋅ g) * u3 )dΩ
+  ∫( Ri * (v1 ⋅ gHat) * u3 )dΩ
 
 # Equação da continuidade
 resCont(t, u1, v2) =
@@ -266,7 +267,7 @@ resk(t, u1, u3, u4, u5, v4) =
   ∫( (nuT∘(u4,u5)) / σk * ∇(v4)⊙∇(u4) )dΩ -
   ∫( v4 * (kProduction∘(∇(u1),u4,u5)) )dΩ +
   ∫( v4 * u5 * (tanh∘(10.0*u4/kEstimate)) )dΩ +
-  ∫( v4 * Ri * (nuT∘(u4,u5)) / σ * (g ⋅ ∇(u3)) * (tanh∘(10.0*u4/kEstimate)) )dΩ
+  ∫( v4 * Ri * (nuT∘(u4,u5)) / σ * (gHat ⋅ ∇(u3)) * (tanh∘(10.0*u4/kEstimate)) )dΩ
 
 # Equação de epsilon
 resEpsilon(t, u1, u4, u5, v5) =
@@ -304,7 +305,12 @@ if !isdir((@__DIR__)*"/results")
   mkdir((@__DIR__)*"/results")
 end
 
-writevtk(Ω,(@__DIR__)*"/results/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
+ReStr = Int(round(Re, RoundDown))
+if !isdir((@__DIR__)*"/results/Re$ReStr-nJets$nJets")
+  mkdir((@__DIR__)*"/results/Re$ReStr-nJets$nJets")
+end
+
+writevtk(Ω,(@__DIR__)*"/results/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
 
 it = 1
 totalIts = T/Δt
@@ -316,7 +322,7 @@ for (t,uₕ) in uₕₜ
   println("Iteration $it/$totalIts")
   
   if(mod(it,1)==0)
-    writevtk(Ω,(@__DIR__)*"/results/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph,"ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
+    writevtk(Ω,(@__DIR__)*"/results/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph,"ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
   end
 
   it = it + 1

@@ -301,14 +301,42 @@ uₕₜ = solve(ode_solver,op,t₀,T,U₀)
 it = 0
 uh, ph, ch, kh, epsilonh = U₀
 
-if !isdir((@__DIR__)*"/results")
-  mkdir((@__DIR__)*"/results")
+#=------------------------
+  Preparo do diretório de resultados
+------------------------=#
+
+dirPath = joinpath(@__DIR__, "results")
+if !isdir(dirPath)
+  mkdir(dirPath)
 end
 
 ReStr = Int(round(Re, RoundDown))
-if !isdir((@__DIR__)*"/results/Re$ReStr-nJets$nJets")
-  mkdir((@__DIR__)*"/results/Re$ReStr-nJets$nJets")
+dirPath = joinpath(dirPath,"Re$ReStr-nJets$nJets")
+if !isdir(caseDir)
+  mkdir(caseDir)
 end
+
+caseComment = """
+----------------------------
+      Case description
+----------------------------
+Spatial dimensions: 2
+Transient:          true
+Reynolds number:    $ReStr
+Richardson number:  $Ri
+Number of jets:     $nJets
+Settling velocity:  $Us
+"""
+
+filePath = joinpath(dirPath, "case-description.txt")
+touch(filePath)
+open(filePath, "w") do file
+    write(file, caseComment)
+end
+
+#=------------------------
+  Solução e escrita dos resultados
+------------------------=#
 
 writevtk(Ω,(@__DIR__)*"/results/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
 

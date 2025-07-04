@@ -1,3 +1,4 @@
 # Ignorar todas as subpastas tmp em qualquer nível do repositório
 **/tmp/
 **/results/
+**/output/

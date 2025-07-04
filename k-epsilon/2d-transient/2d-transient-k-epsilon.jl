@@ -156,8 +156,8 @@ u1IC(t::Real) = x -> u1IC(x,t)
 
 u2BC(x, t::Real) = 0.0
 u2BC(t::Real) = x -> u2BC(x,t)
-u2IC(x, t::Real) = 0.0
-u2IC(t::Real) = x -> u2IC(x,t)
+# u2IC(x, t::Real) = 0.0
+# u2IC(t::Real) = x -> u2IC(x,t)
 
 u3BC(x, t::Real) = scalarProfile(x,t)
 u3BC(t::Real) = x -> u3BC(x,t)
@@ -246,7 +246,7 @@ epsilonDestruction(u4, u5) = Cϵ2 * u5 * u5 / max(u4, minVal)
 resNS(t, u1, u2, u3, u4, u5, v1) = 
   ∫( v1 ⋅ ∂t(u1) )dΩ +
   ∫( v1 ⋅ (∇(u1)' ⋅ u1) )dΩ +
-  ∫( (1/Re + (nuT∘(u4,u5))) * ∇(v1)⊙∇(u1) )dΩ - 
+  ∫( (1/Re + (nuT∘(u4,u5))) * ∇(v1)⊙(∇(u1) + ∇(u1)') )dΩ - 
   ∫( (∇ ⋅ v1) * u2 )dΩ -
   ∫( Ri * (v1 ⋅ gHat) * u3 )dΩ
 
@@ -294,26 +294,26 @@ CFL = 1.0/2.0
 
 ode_solver = ThetaMethod(nls,Δt,θ)
 
-U₀ = interpolate_everywhere([u1IC(0),u2IC(0),u3IC(0),u4IC(0),u5IC(0)],X(0.0))
+U₀ = interpolate_everywhere([u1IC(0),u3IC(0),u4IC(0),u5IC(0)],X(0.0))
 t₀ = 0.0
 T = 100.0
 uₕₜ = solve(ode_solver,op,t₀,T,U₀)
 it = 0
-uh, ph, ch, kh, epsilonh = U₀
+uh, ch, kh, epsilonh = U₀
 
 #=------------------------
   Preparo do diretório de resultados
 ------------------------=#
 
-dirPath = joinpath(@__DIR__, "results")
+dirPath = joinpath(@__DIR__, "output")
 if !isdir(dirPath)
   mkdir(dirPath)
 end
 
 ReStr = Int(round(Re, RoundDown))
 dirPath = joinpath(dirPath,"Re$ReStr-nJets$nJets")
-if !isdir(caseDir)
-  mkdir(caseDir)
+if !isdir(dirPath)
+  mkdir(dirPath)
 end
 
 caseComment = """
@@ -338,7 +338,7 @@ end
   Solução e escrita dos resultados
 ------------------------=#
 
-writevtk(Ω,(@__DIR__)*"/results/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
+writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
 
 it = 1
 totalIts = T/Δt
@@ -350,7 +350,7 @@ for (t,uₕ) in uₕₜ
   println("Iteration $it/$totalIts")
   
   if(mod(it,1)==0)
-    writevtk(Ω,(@__DIR__)*"/results/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph,"ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
+    writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph,"ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
   end
 
   it = it + 1

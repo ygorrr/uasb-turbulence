@@ -50,7 +50,7 @@ const Sc = 1.0
 const Ri = 0.1
 
 U = VectorValue(reactorVelocity / URef)
-Us = VectorValue(-0.2)
+Us = VectorValue(-0.1)
 W = U + Us
 ĝ = VectorValue(-1.0)
 
@@ -58,8 +58,8 @@ eddyVisc(k, ϵ) = Cμ*k*k/max(ϵ, 0.01)
 
 res(t, (C, k, ϵ), (v1, v2, v3)) =
     ∫(v1*∂t(C) + v1*W⋅∇(C) + (1/Re/Sc + (eddyVisc∘(k,ϵ))/σ)*∇(v1)⋅∇(C))dΩ +
-    ∫(v2*∂t(k) + v2*U⋅∇(k) + (eddyVisc∘(k,ϵ))/σk*∇(v2)⋅∇(k) + v2*ϵ + v2*(Ri*(eddyVisc∘(k,ϵ))/σ))dΩ +
-    ∫(v3*∂t(ϵ) + v3*U⋅∇(ϵ) + (eddyVisc∘(k, ϵ))/σϵ*∇(v3)⋅∇(ϵ) + v3*Cϵ2*ϵ*ϵ/k)dΩ
+    ∫(v2*∂t(k) + v2*U⋅∇(k) + (eddyVisc∘(k,ϵ))/σk*∇(v2)⋅∇(k) + v2*ϵ*(tanh∘(10.0*k/dirichlet_k)) + v2*(Ri*(eddyVisc∘(k,ϵ))/σ)*(tanh∘(10.0*k/dirichlet_k)))dΩ +
+    ∫(v3*∂t(ϵ) + v3*U⋅∇(ϵ) + (eddyVisc∘(k, ϵ))/σϵ*∇(v3)⋅∇(ϵ) + v3*Cϵ2*ϵ*ϵ/k*(tanh∘(10.0*ϵ/dirichlet_epsilon)))dΩ
 
 # -------------------------------------------------------------------
 #                      Formulação de MEF
@@ -122,20 +122,9 @@ u_ht = solve(ode_solver, op, t_θ, T, u_θ)
   Preparo do diretório de resultados
 ------------------------=#
 
-dirPath = joinpath(@__DIR__, "output")
-if !isdir(dirPath)
-  mkdir(dirPath)
-end
-
-ReStr = Int(round(Re, RoundDown))
-dirPath = joinpath(dirPath,"Re$ReStr-nJets$nJets")
-if !isdir(dirPath)
-  mkdir(dirPath)
-end
-
-caseComment = """
+caseDesc = """
 ----------------------------
-      Case description
+Case description
 ----------------------------
 Spatial dimensions: 1
 Transient:          true
@@ -145,11 +134,30 @@ Number of jets:     $nJets
 Settling velocity:  $Us
 """
 
-filePath = joinpath(dirPath, "case-description.txt")
-touch(filePath)
-open(filePath, "w") do file
-    write(file, caseComment)
+path = joinpath(@__DIR__, "case-description.txt")
+if isfile(path)
+  rm(path)
 end
+touch(path)
+print(path, caseDesc)
+
+path = joinpath(@__DIR__,"case.log")
+if isfile(path)
+  rm(path)
+end
+touch(path)
+
+path = joinpath(@__DIR__, "output")
+if !isdir(dirPath)
+  mkdir(dirPath)
+end
+
+ReStr = Int(round(Re, RoundDown))
+path = joinpath(path,"Re$ReStr-nJets$nJets")
+if isdir(dirPath)
+  rm(dirPath, recursive=true)
+end
+mkdir(dirPath)
 
 #=------------------------
   Solução e escrita dos resultados
@@ -165,9 +173,11 @@ for (t,u_h) in u_ht
   global it
   local ch, kh, epsilonh
   it = it + 1
-  println("Iteration $it/$totalIts:")
+  println("Iterations completed: $it/$totalIts")
   ch, kh, epsilonh = u_h 
-  if(mod(it,1)==0)
+  if (mod(it,1)==0)
     writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh, "nuT"=>eddyVisc∘(kh, epsilonh)])
   end
 end
+
+println("Simulation completed without errors.")

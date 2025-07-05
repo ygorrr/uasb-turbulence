@@ -156,8 +156,8 @@ u1IC(t::Real) = x -> u1IC(x,t)
 
 u2BC(x, t::Real) = 0.0
 u2BC(t::Real) = x -> u2BC(x,t)
-# u2IC(x, t::Real) = 0.0
-# u2IC(t::Real) = x -> u2IC(x,t)
+u2IC(x, t::Real) = 0.0
+u2IC(t::Real) = x -> u2IC(x,t)
 
 u3BC(x, t::Real) = scalarProfile(x,t)
 u3BC(t::Real) = x -> u3BC(x,t)
@@ -241,12 +241,12 @@ epsilonDestruction(u4, u5) = Cϵ2 * u5 * u5 / max(u4, minVal)
 #=------------------------
   Resíduos
 ------------------------=#
-
-# Equação de Navier-Stokes 
+# Equação de Navier-Stokes
+# Experimentando a função de parte simétrica de tensor ε(u1) = ∇(u1) + (∇(u1)') / 2
 resNS(t, u1, u2, u3, u4, u5, v1) = 
   ∫( v1 ⋅ ∂t(u1) )dΩ +
   ∫( v1 ⋅ (∇(u1)' ⋅ u1) )dΩ +
-  ∫( (1/Re + (nuT∘(u4,u5))) * ∇(v1)⊙(∇(u1) + ∇(u1)') )dΩ - 
+  ∫( (1/Re + (nuT∘(u4,u5))) * (∇(v1)⊙ε(u1))*2 )dΩ - 
   ∫( (∇ ⋅ v1) * u2 )dΩ -
   ∫( Ri * (v1 ⋅ gHat) * u3 )dΩ
 
@@ -294,12 +294,12 @@ CFL = 1.0/2.0
 
 ode_solver = ThetaMethod(nls,Δt,θ)
 
-U₀ = interpolate_everywhere([u1IC(0),u3IC(0),u4IC(0),u5IC(0)],X(0.0))
+U₀ = interpolate_everywhere([u1IC(0),u2IC(0),u3IC(0),u4IC(0),u5IC(0)],X(0.0))
 t₀ = 0.0
 T = 100.0
 uₕₜ = solve(ode_solver,op,t₀,T,U₀)
 it = 0
-uh, ch, kh, epsilonh = U₀
+uh, ph, ch, kh, epsilonh = U₀
 
 #=------------------------
   Preparo do diretório de resultados

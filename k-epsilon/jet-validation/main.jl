@@ -22,20 +22,25 @@ Cϵ2 = 1.92  # Constante de destruição de epsilon
 
 slitWidth = 0.1 # m
 
-Re = 20000
+Re = 200
 
 Uj = Re * nu / slitWidth  # Velocidade do jato
 
-n = 50
+n = 100
 Lx = 20 * slitWidth
 Ly = 200 * slitWidth
 domain = (-Lx/2, Lx/2, 0, Ly)
-partition = (n, 2*n)
-model = CartesianDiscreteModel(domain, partition; isperiodic=(true,false))
+partition = (2*n, n)
+model = CartesianDiscreteModel(domain, partition)
+writevtk(model, @__DIR__)
 
 labels = get_face_labeling(model)
 add_tag_from_tags!(labels, "top", [6,])
 add_tag_from_tags!(labels, "bottom", [5,])
+add_tag_from_tags!(labels, "left", [1, 3, 7])
+add_tag_from_tags!(labels, "right", [2, 4, 8])
+
+neumannTags = ["left", "right", "top"]
 
 #=------------------------
 Incógnitas:
@@ -47,16 +52,16 @@ Espaços de de funções de ensaio: S1, S2, S3, S4, S5
 order = 2
 
 reffe_U = ReferenceFE(lagrangian, VectorValue{2, Float64}, order)
-V1 = TestFESpace(model, reffe_U, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
+VU = TestFESpace(model, reffe_U, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
 
 reffe_P = ReferenceFE(lagrangian, Float64, order-1; space=:P)
-V2 = TestFESpace(model, reffe_P, conformity=:L2, dirichlet_tags=["top"])
+VP = TestFESpace(model, reffe_P, conformity=:L2, dirichlet_tags=["top"])
 
 reffe_k = ReferenceFE(lagrangian, Float64, order)
-V3 = TestFESpace(model, reffe_k, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
+Vk = TestFESpace(model, reffe_k, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
 
 reffe_ε = ReferenceFE(lagrangian, Float64, order)
-V4 = TestFESpace(model, reffe_ε, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
+Vε = TestFESpace(model, reffe_ε, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
 
 #=------------------------
   Condições iniciais e de contorno
@@ -70,12 +75,18 @@ function unitJet(x)
   return (tanh(a*(x[1]-Δx)) * -tanh(a*(x[1]+Δx)) + 1) / 2
 end
 
-function jetProfile(x, t::Real)
+function jetProfile(x)
   global Uj
   # amplitude = 1.0 # Forçar amplitude para 1.0
   local velocityY = 0.0
   velocityY += Uj * unitJet(x[1])
   return VectorValue(0.0, velocityY)
+end
+
+function scalarProfile(x)
+  local scalarVal = 0.0
+  scalarVal += unitJet(x[1])
+  return scalarVal
 end
 
 #=------------------------
@@ -87,7 +98,7 @@ begin
   xRange = -Lx/2:0.001:Lx/2
   yComponents = []
   for x in xRange
-    append!(yComponents, jetProfile(x, 0)[2])
+    append!(yComponents, jetProfile(x)[2])
   end
 
   plot(xRange, yComponents, xlabel="x", ylabel="Velocidade em y", title="Perfil de velocidade de jato", label="jetProfile")
@@ -95,13 +106,13 @@ begin
   scatter!(jetContour, [0.0, 0.0], label="jetContour")
 end
 
-UBC(x, t::Real) = jetProfile(x,t)
-UBC(t::Real) = x -> UBC(x,t)
+UBC(x) = jetProfile(x)
+# UBC(t::Real) = x -> UBC(x,t)
 # UIC(x, t::Real) = exp(-5.0 * x[2] / Ly) * jetProfile(x,t)
 # UIC(t::Real) = x -> UIC(x,t)
 
-PBC(x, t::Real) = 0.0
-PBC(t::Real) = x -> PBC(x,t)
+PBC(x) = 0.0
+# PBC(t::Real) = x -> PBC(x,t)
 # u2IC(x, t::Real) = 0.0
 # u2IC(t::Real) = x -> u2IC(x,t)
 
@@ -117,15 +128,13 @@ I é definida como a razão entre a velocidade de flutuação e a velocidade mé
 I = u' / Uref
 ------------------------=#
 
-Uref = meanJetVelocity / Uc
+# Uref = meanJetVelocity / Uc
 I = 0.1 
-kEstimate = (3/2) * (I * Uref)^2
-kEstimate = 0.015 # Forçar k para 0.015
+kEstimate = (3/2) * (I * Uj)^2
+# kEstimate = 0.015 # Forçar k para 0.015
 
-u4BC(x, t::Real) = kEstimate * scalarProfile(x,t)
-u4BC(t::Real) = x -> u4BC(x,t)
-u4IC(x, t::Real) = kEstimate * exp(-5.0 * x[2] / Ly) * scalarProfile(x,t)
-u4IC(t::Real) = x -> u4IC(x,t)
+kBC(x) = kEstimate * scalarProfile(x)
+# kBC(t::Real) = x -> kBC(x,t)
 
 #=------------------------
   Adote apenas uma das estratégias abaixo para a estimativa de epsilon!
@@ -141,106 +150,82 @@ u4IC(t::Real) = x -> u4IC(x,t)
   onde α é uma constante, tipicamente entre 0.07 e 0.1.
 ------------------------=#
 α = 0.07
-ϵEstimate = Cμ^(3/4) * kEstimate^(3/2) / (α * jetDiameter)
+ϵEstimate = Cμ^(3/4) * kEstimate^(3/2) / (α * slitWidth)
 
 #=------------------------
   Estimativa baseada em argumentos de escala:
     νₜ ~ Ujet * φ
   Essa estimativa vem de argumentos de escala, supondo que as flutuações da velocidade e comprimento de mistura sejam proporcionais à velocidade média do jato e ao diâmetro do jato, ou seja, νₜ ~ u'ℓ ~ Ujet * φ.
 ------------------------=#
-ϵEstimate = Cμ * kEstimate^2 / (Uref * jetDiameter/Lc)
+# ϵEstimate = Cμ * kEstimate^2 / (Uref * jetDiameter/Lc)
 
-ϵEstimate = 0.002025 # Forçar epsilon para 0.002025
+# ϵEstimate = 0.002025 # Forçar epsilon para 0.002025
 
-u5BC(x, t::Real) = ϵEstimate * scalarProfile(x,t)
-u5BC(t::Real) = x -> u5BC(x,t)
-u5IC(x, t::Real) = ϵEstimate * exp(-5.0 * x[2] / Ly) * scalarProfile(x,t)
-u5IC(t::Real) = x -> u5IC(x,t)
+εBC(x) = ϵEstimate * scalarProfile(x)
+# εBC(t::Real) = x -> εBC(x,t)
 
-S1 = TransientTrialFESpace(V1, [u1BC])
-S2 = TransientTrialFESpace(V2, [u2BC])
-S3 = TransientTrialFESpace(V3, [u3BC])
-S4 = TransientTrialFESpace(V4, [u4BC])
-S5 = TransientTrialFESpace(V5, [u5BC])
+SU = TrialFESpace(VU, [UBC])
+SP = TrialFESpace(VP, [PBC])
+Sk = TrialFESpace(Vk, [kBC])
+Sε = TrialFESpace(Vε, [εBC])
 
-Y = MultiFieldFESpace([V1, V2, V3, V4, V5])
-X = TransientMultiFieldFESpace([S1, S2, S3, S4, S5])
+Y = MultiFieldFESpace([VU, VP, Vk, Vε])
+X = MultiFieldFESpace([SU, SP, Sk, Sε])
 
 degree = 2*order
 Ω = Triangulation(model)
 dΩ = Measure(Ω, degree)
 
-Us = VectorValue(0.0, -0.1) # Velocidade de decantação de partículas
+Γ = BoundaryTriangulation(Ω, neumannTags)
+dΓ = Measure(Γ, degree)
+
 minVal = 1e-2 # Constante de proteção contra divisão por zero
 
-w(u) = u + Us
-nuT(u4, u5) = Cμ * u4 * u4 / max(u5, minVal)
-kProduction(∇u1, u4, u5) = nuT(u4, u5) * ((∇u1 + ∇u1') ⊙ ∇u1)
-epsilonProduction(∇u1, u4, u5) = Cϵ1 * kProduction(∇u1, u4, u5) * max(u5, minVal) / max(u4, minVal)
-epsilonDestruction(u4, u5) = Cϵ2 * u5 * u5 / max(u4, minVal)
+nuT(k, ε) = Cμ * k * k / max(ε, minVal)
+kProduction(∇U, k, ε) = nuT(k, ε) * ((∇U + ∇U') ⊙ ∇U)
+epsilonProduction(∇U, k, ε) = Cϵ1 * kProduction(∇U, k, ε) * max(ε, minVal) / max(k, minVal)
+epsilonDestruction(k, ε) = Cϵ2 * ε * ε / max(k, minVal)
 
 #=------------------------
   Resíduos
 ------------------------=#
 # Equação de Navier-Stokes
 # Experimentando a função de parte simétrica de tensor ε(u1) = ∇(u1) + (∇(u1)') / 2
-resNS(t, u1, u2, u3, u4, u5, v1) = 
-  ∫( v1 ⋅ ∂t(u1) )dΩ +
-  ∫( v1 ⋅ (∇(u1)' ⋅ u1) )dΩ +
-  ∫( (1/Re + (nuT∘(u4,u5))) * (∇(v1)⊙ε(u1))*2 )dΩ - 
-  ∫( (∇ ⋅ v1) * u2 )dΩ -
-  ∫( Ri * (v1 ⋅ gHat) * u3 )dΩ
+
+resNS(U, P, k, ε, vU) = 
+  ∫( vU ⋅ (∇(U)' ⋅ U) )dΩ +
+  ∫( (1/Re + (nuT∘(k,ε))) * (∇(vU)⊙(∇(U) + (∇(U))')) )dΩ - 
+  ∫( (∇ ⋅ vU) * P )dΩ 
 
 # Equação da continuidade
-resCont(t, u1, v2) =
-  ∫( v2 * (∇ ⋅ u1) )dΩ
-
-# Equação de transporte de partículas
-resC(t, u1, u3, u4, u5, v3) =
-  ∫( v3 * ∂t(u3) )dΩ +
-  ∫( v3 ⋅ inner(w(u1), ∇(u3)) )dΩ +
-  ∫( (1/Re * 1/Sc + (nuT∘(u4,u5))/σ) * ∇(u3)⊙∇(v3) )dΩ
+resCont(U, vP) =
+  ∫( vP * (∇ ⋅ U) )dΩ
 
 # Equação de k
-resk(t, u1, u3, u4, u5, v4) = 
-  ∫( v4 * ∂t(u4) )dΩ +
-  ∫( v4 ⋅ (∇(u4)' ⋅ u1) )dΩ +
-  ∫( (nuT∘(u4,u5)) / σk * ∇(v4)⊙∇(u4) )dΩ -
-  ∫( v4 * (kProduction∘(∇(u1),u4,u5)) )dΩ +
-  ∫( v4 * u5 * (tanh∘(10.0*u4/kEstimate)) )dΩ +
-  ∫( v4 * Ri * (nuT∘(u4,u5)) / σ * (gHat ⋅ ∇(u3)) * (tanh∘(10.0*u4/kEstimate)) )dΩ
+resk(U, k, ε, vk) = 
+  ∫( vk ⋅ (∇(k)' ⋅ U) )dΩ +
+  ∫( (nuT∘(k,ε)) / σk * ∇(vk)⊙∇(k) )dΩ -
+  ∫( vk * (kProduction∘(∇(U),k,ε)) )dΩ +
+  ∫( vk * ε * (tanh∘(10.0*k/kEstimate)) )dΩ
 
 # Equação de epsilon
-resEpsilon(t, u1, u4, u5, v5) =
-  ∫( v5 * ∂t(u5) )dΩ +
-  ∫( v5 ⋅ (∇(u5)' ⋅ u1) )dΩ +
-  ∫( (nuT∘(u4,u5)) / σϵ * ∇(u5)⊙∇(v5) )dΩ -
-  ∫( v5 * (epsilonProduction∘(∇(u1),u4,u5)) )dΩ +
-  ∫( v5 * (epsilonDestruction∘(u4,u5)) * (tanh∘(10.0*u5/ϵEstimate)) )dΩ
+resEpsilon(U, k, ε, vε) =
+  ∫( vε ⋅ (∇(ε)' ⋅ U) )dΩ +
+  ∫( (nuT∘(k,ε)) / σϵ * ∇(vε)⊙∇(ε) )dΩ -
+  ∫( vε * (epsilonProduction∘(∇(U),k,ε)) )dΩ +
+  ∫( vε * (epsilonDestruction∘(k,ε)) * (tanh∘(10.0*ε/ϵEstimate)) )dΩ
 
-res(t, (u1, u2, u3, u4, u5), (v1, v2, v3, v4, v5)) =
-  resNS(t, u1, u2, u3, u4, u5, v1) +
-  resCont(t, u1, v2) +
-  resC(t, u1, u3, u4, u5, v3) +
-  resk(t, u1, u3, u4, u5, v4) +
-  resEpsilon(t, u1, u4, u5, v5)
+res((U, P, k, ε), (vU, vP, vk, vε)) =
+  resNS(U, P, k, ε, vU) +
+  resCont(U, vP) +
+  resk(U, k, ε, vk) +
+  resEpsilon(U, k, ε, vε)
 
-op = TransientFEOperator(res,X,Y)
+op = FEOperator(res,X,Y)
 
 nls = NLSolver(show_trace=true, method=:newton, linesearch=BackTracking(), iterations=10)
-
-CFL = 1.0/2.0
-Δt = CFL*Lx/n
-θ = 1
-
-ode_solver = ThetaMethod(nls,Δt,θ)
-
-U₀ = interpolate_everywhere([u1IC(0),u2IC(0),u3IC(0),u4IC(0),u5IC(0)],X(0.0))
-t₀ = 0.0
-T = 100.0
-uₕₜ = solve(ode_solver,op,t₀,T,U₀)
-it = 0
-uh, ph, ch, kh, epsilonh = U₀
+solver = FESolver(nls)
+Uh, Ph, kh, εh = solve(solver,op)
 
 #=------------------------
   Preparo do diretório de resultados
@@ -252,7 +237,7 @@ if !isdir(dirPath)
 end
 
 ReStr = Int(round(Re, RoundDown))
-dirPath = joinpath(dirPath,"Re$ReStr-nJets$nJets")
+dirPath = joinpath(dirPath,"Re$ReStr")
 if !isdir(dirPath)
   mkdir(dirPath)
 end
@@ -262,11 +247,8 @@ caseComment = """
       Case description
 ----------------------------
 Spatial dimensions: 2
-Transient:          true
+Transient:          False
 Reynolds number:    $ReStr
-Richardson number:  $Ri
-Number of jets:     $nJets
-Settling velocity:  $Us
 """
 
 filePath = joinpath(dirPath, "case-description.txt")
@@ -279,20 +261,4 @@ end
   Solução e escrita dos resultados
 ------------------------=#
 
-writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
-
-it = 1
-totalIts = T/Δt
-for (t,uₕ) in uₕₜ
-  global it
-  local uh,ph,ch,kh,epsilonh
-  uh, ph, ch, kh, epsilonh = uₕ
-  
-  println("Iteration $it/$totalIts")
-  
-  if(mod(it,1)==0)
-    writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph,"ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
-  end
-
-  it = it + 1
-end
+writevtk(Ω,(@__DIR__)*"/output/Re$ReStr/plane-jet.vtu",cellfields=["Uh"=>Uh,"Ph"=>Ph, "kh"=>kh, "epsilonh"=>εh])

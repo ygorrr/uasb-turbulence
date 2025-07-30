@@ -55,7 +55,7 @@ reffe_U = ReferenceFE(lagrangian, VectorValue{2, Float64}, order)
 VU = TestFESpace(model, reffe_U, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
 
 reffe_P = ReferenceFE(lagrangian, Float64, order-1; space=:P)
-VP = TestFESpace(model, reffe_P, conformity=:L2, dirichlet_tags=["top"])
+VP = TestFESpace(model, reffe_P, conformity=:L2, dirichlet_tags=["top", "left", "right"])
 
 reffe_k = ReferenceFE(lagrangian, Float64, order)
 Vk = TestFESpace(model, reffe_k, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
@@ -107,14 +107,8 @@ begin
 end
 
 UBC(x) = jetProfile(x)
-# UBC(t::Real) = x -> UBC(x,t)
-# UIC(x, t::Real) = exp(-5.0 * x[2] / Ly) * jetProfile(x,t)
-# UIC(t::Real) = x -> UIC(x,t)
 
 PBC(x) = 0.0
-# PBC(t::Real) = x -> PBC(x,t)
-# u2IC(x, t::Real) = 0.0
-# u2IC(t::Real) = x -> u2IC(x,t)
 
 #=------------------------
   Estimativa de k na saída do jato
@@ -128,13 +122,11 @@ I é definida como a razão entre a velocidade de flutuação e a velocidade mé
 I = u' / Uref
 ------------------------=#
 
-# Uref = meanJetVelocity / Uc
 I = 0.1 
 kEstimate = (3/2) * (I * Uj)^2
 # kEstimate = 0.015 # Forçar k para 0.015
 
 kBC(x) = kEstimate * scalarProfile(x)
-# kBC(t::Real) = x -> kBC(x,t)
 
 #=------------------------
   Adote apenas uma das estratégias abaixo para a estimativa de epsilon!
@@ -162,7 +154,6 @@ kBC(x) = kEstimate * scalarProfile(x)
 # ϵEstimate = 0.002025 # Forçar epsilon para 0.002025
 
 εBC(x) = ϵEstimate * scalarProfile(x)
-# εBC(t::Real) = x -> εBC(x,t)
 
 SU = TrialFESpace(VU, [UBC])
 SP = TrialFESpace(VP, [PBC])

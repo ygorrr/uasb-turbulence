@@ -2,35 +2,34 @@ using Gridap
 using LineSearches: BackTracking
 using Plots
 
-#=------------------------
-  Propriedades físicas
-------------------------=#
-ρ = 1.0  # Densidade do fluido
-nu = 1.0e-3 # Viscosidade cinemática do fluido (água) em m²/s
-g = 9.81 # Aceleração da gravidade em m/s²
-gHat = VectorValue(0.0, -1.0)  # Vetor aceleração unitário
+# --- Parâmetros físicos ---
+ρ = 1.0                     # Densidade do fluido [kg/m³]
+nu = 1.0e-3                 # Viscosidade cinemática do fluido [m²/s]
+g = 9.81                    # Aceleração da gravidade [m/s²]
+ĝ = VectorValue(0.0, -1.0)  # Vetor aceleração gravitacional unitário
 
-#=------------------------
-  Constantes do modelo k-epsilon
-------------------------=#
-Cμ = 0.09  # Constante de turbulência
-Cϵ1 = 1.44  # Constante de produção de epsilon
-Cϵ2 = 1.92  # Constante de destruição de epsilon
-σk = 1.0  # Constante de difusão de k
-σϵ = 1.3  # Constante de difusão de epsilon
-σ = 1.0  # Constante de difusão de concentração
+# --- Parâmetros geométricos ---
+Lj = 0.1      # Largura de entrada do jato [m]
 
-slitWidth = 0.1 # m
+# --- Constantes do modelo k-ϵ ---
+Cμ = 0.09     # Constante de turbulência
+Cϵ1 = 1.44    # Constante de produção de ϵ
+Cϵ2 = 1.92    # Constante de destruição de ϵ
+σk = 1.0      # Número de Prandtl turbulento de k
+σϵ = 1.3      # Número de Prandtl turbulento de ϵ
+σ = 1.0       # Número de Prandtl turbulento de C
+
 
 Re = 200
 
-Uj = Re * nu / slitWidth  # Velocidade do jato
+Uj = Re * nu / Lj  # Velocidade do jato
 
+# --- Malha e modelo geométrico ---
 n = 100
-Lx = 20 * slitWidth
-Ly = 200 * slitWidth
+Lx = 10 * Lj
+Ly = 10 * Lj
 domain = (-Lx/2, Lx/2, 0, Ly)
-partition = (2*n, n)
+partition = (n, n)
 model = CartesianDiscreteModel(domain, partition)
 writevtk(model, @__DIR__)
 
@@ -42,50 +41,58 @@ add_tag_from_tags!(labels, "right", [2, 4, 8])
 
 neumannTags = ["left", "right", "top"]
 
-#=------------------------
-Incógnitas:
-
-Espaços de funções de teste: V1, V2, V3, V4, V5
-Espaços de de funções de ensaio: S1, S2, S3, S4, S5
-------------------------=#
-
+# --- Método dos Elementos Finitos ---
 order = 2
 
-reffe_U = ReferenceFE(lagrangian, VectorValue{2, Float64}, order)
-VU = TestFESpace(model, reffe_U, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
-
+reffe_U = ReferenceFE(lagrangian, VectorValue{2,Float64}, order)
 reffe_P = ReferenceFE(lagrangian, Float64, order-1; space=:P)
-VP = TestFESpace(model, reffe_P, conformity=:L2, dirichlet_tags=["top", "left", "right"])
-
 reffe_k = ReferenceFE(lagrangian, Float64, order)
-Vk = TestFESpace(model, reffe_k, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
-
 reffe_ε = ReferenceFE(lagrangian, Float64, order)
+
+VU = TestFESpace(model, reffe_U, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
+VP = TestFESpace(model, reffe_P, conformity=:L2, dirichlet_tags=["top", "left", "right"])
+Vk = TestFESpace(model, reffe_k, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
 Vε = TestFESpace(model, reffe_ε, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
+
+
 
 #=------------------------
   Condições iniciais e de contorno
 ------------------------=#
 
+xJets = [0.0] # Coordenadas dos centros dos jatos em x
+
+# Perfil da componente vertical um jato unitário
 function unitJet(x)
-  global slitWidth
-  local a = 75.0*3
+  global Lj
+  local a = 75.0/5
   local xThreshold = log(1999)/(2*a)
-  Δx = -slitWidth / 2 + xThreshold
-  return (tanh(a*(x[1]-Δx)) * -tanh(a*(x[1]+Δx)) + 1) / 2
+  
+  Δx = - Lj / (2) + xThreshold
+  
+  return (tanh(a*(x[1]-Δx)) * - tanh(a*(x[1]+Δx)) + 1) / 2
 end
 
+# Perfil de velocidade dos jatos
 function jetProfile(x)
-  global Uj
-  # amplitude = 1.0 # Forçar amplitude para 1.0
-  local velocityY = 0.0
-  velocityY += Uj * unitJet(x[1])
-  return VectorValue(0.0, velocityY)
+  global xJets
+  local Uy = 0.0
+  
+  for xJet in xJets
+    Uy += unitJet(x[1] - xJet)
+  end
+  Uy = VectorValue(0.0, Uy)
+  
+  return Uy
 end
+
 
 function scalarProfile(x)
+  global xJets
   local scalarVal = 0.0
-  scalarVal += unitJet(x[1])
+  for xJet in xJets
+    scalarVal += unitJet(x[1] - xJet / Lc)
+  end
   return scalarVal
 end
 
@@ -170,7 +177,7 @@ dΩ = Measure(Ω, degree)
 Γ = BoundaryTriangulation(Ω, neumannTags)
 dΓ = Measure(Γ, degree)
 
-minVal = 1e-2 # Constante de proteção contra divisão por zero
+minVal = 1e-2 # Constante de regularização
 
 nuT(k, ε) = Cμ * k * k / max(ε, minVal)
 kProduction(∇U, k, ε) = nuT(k, ε) * ((∇U + ∇U') ⊙ ∇U)

@@ -1,3 +1,9 @@
+#=
+Simulação de 1/9 de um tanque.
+Cada contêiner tem 1 uasbc
+Cada uasb tem 9 furos
+=#
+
 using Gridap
 using LineSearches: BackTracking
 using Plots
@@ -6,8 +12,8 @@ using Plots
   Propriedades físicas
 ------------------------=#
 β = 0.1 # Coeficiente de dilatação mássica
-ρ = 1.0  # Densidade do fluido
-nu = 1.0e-3 # Viscosidade cinemática do fluido (água) em m²/s
+ρ = 1000.0  # Densidade do fluido
+μ = 1.0e-3 # Viscosidade dinâmica do fluido (água) em Pa.s
 g = 9.81 # Aceleração da gravidade em m/s²
 ĝ = VectorValue(0.0, -1.0)  # Vetor aceleração unitário
 
@@ -24,18 +30,19 @@ Cϵ2 = 1.92  # Constante de destruição de epsilon
 #=------------------------
   Parâmetros geométricos e operacionais do UASB
 ------------------------=#
-φ_uasb = 1.8              # m
-H_uasb = 2*φ_uasb         # m
-A_uasb = π*(φ_uasb/2)^2   # m²
-HDT = 60*60             # s
-Q = A_uasb*H_uasb/HDT     # m³/s
-U_uasb = H_uasb/HDT       # m/s
+φ_uasb = 1.8 # m
+H_uasb = 2 # m
+A_uasb = π*(φ_uasb/2)^2 # m²
+Q = 0.500/1000 # m³/s
+HDT = A_uasb*H_uasb / Q # s
+HDT_horas = HDT/3600
+U_uasb = Q/A_uasb # m/s
 
-φ_jet = 0.2               # m
-A_jet = π*(φ_jet/2)^2     # m²
-xJets = [0.0]     # Posições dos jatos ao longo de x
-nJets = length(xJets)     # Número de jatos
-U_jet = Q/(nJets*A_jet)   # m/s
+φ_jet = 0.2 # m
+A_jet = π*(φ_jet/2)^2 # m²
+xJets = [0.0] # Posições dos jatos ao longo de x
+nJets = length(xJets) # Número de jatos
+U_jet = Q/(9*A_jet) # m/s
 
 #=------------------------
   Grandezas características do modelo
@@ -48,20 +55,20 @@ Cc = 1.0
   Números adimensionais do modelo
 ------------------------=#
 # Número de Reynolds do UASB
-Re_uasb = U_uasb*φ_uasb/nu 
+Re_uasb = ρ*U_uasb*φ_uasb/μ
 
 # Número de Reynolds do jato
-Re_jet = U_jet*φ_jet/nu 
+Re_jet = ρ*U_jet*φ_jet/μ 
 
 # Número de Reynolds do modelo
-Re = Uc*Lc/nu
+Re = ρ*Uc*Lc/μ
 Sc = 1.0
 # Ri = β*g*(Cc/Lc)/(Uc/Lc)^2
 Ri = 1e-1
 
 n = 50
-Lx = φ_uasb / Lc
-Ly = H_uasb / Lc
+Lx = 0.6 / Lc
+Ly = 2 * Lx
 domain = (-Lx/2, Lx/2, 0, Ly)
 partition = (n, 2*n)
 model = CartesianDiscreteModel(domain, partition; isperiodic=(true,false))
@@ -117,7 +124,7 @@ function jetProfile(x, t::Real)
   local amplitude = U_jet / Uc
   local velocityY = 0.0
   for xJet in xJets
-    velocityY += amplitude * unitJet(x[1] - xJet / Lc)
+    velocityY += amplitude * unitJet(x[1]/2 - xJet / Lc)
   end
   return velocityY
 end
@@ -126,7 +133,7 @@ function scalarProfile(x, t::Real)
   global xJets
   local scalarVal = 0.0
   for xJet in xJets
-    scalarVal += unitJet(x[1] - xJet / Lc)
+    scalarVal += unitJet(x[1]/2 - xJet / Lc)
   end
   return scalarVal
 end
@@ -166,7 +173,7 @@ function calcMeanValue(x_min, x_max, f)
 
   return integral / (x_max - x_min)
 end
-  
+
 x_min = -Lx/2
 x_max = Lx/2
 # Primitiva do WolframAlpha
@@ -180,9 +187,14 @@ F(x) = (-1/2/a) * coth(2*b)*(log(cosh(b-a*x)) - log(cosh(a*x+b)))
 F(x) = (coth(2*b)/a) * atanh(tanh(b) * tanh(a*x))
 (F(x_max) - F(x_min))/(x_max - x_min)
 
-u1BC(x, t::Real) = VectorValue(0, jetProfile(x,t))
+α = 0.15
+f(t) = 1-exp(-t/α)
+xRange = range(0,5;length=100)
+plot(xRange, f)
+
+u1BC(x, t::Real) = VectorValue(0, jetProfile(x,t)) * f(t)
 u1BC(t::Real) = x -> u1BC(x,t)
-u1IC(x, t::Real) = exp(-5.0 * x[2] / Ly) * VectorValue(0, jetProfile(x,t))
+u1IC(x, t::Real) = VectorValue(0, 0)
 u1IC(t::Real) = x -> u1IC(x,t)
 
 u2BC(x, t::Real) = 0.0
@@ -190,7 +202,7 @@ u2BC(t::Real) = x -> u2BC(x,t)
 u2IC(x, t::Real) = 0.0
 u2IC(t::Real) = x -> u2IC(x,t)
 
-u3BC(x, t::Real) = scalarProfile(x,t)
+u3BC(x, t::Real) = scalarProfile(x,t) * f(t)
 u3BC(t::Real) = x -> u3BC(x,t)
 u3IC(x, t::Real) = 0.0
 u3IC(t::Real) = x -> u3IC(x,t)
@@ -207,14 +219,14 @@ I é definida como a razão entre a velocidade de flutuação e a velocidade mé
 I = u' / Uref
 ------------------------=#
 
-Uref = meanJetVelocity / Uc
+Uref = U_jet / Uc
 I = 0.1 
 kEstimate = (3/2) * (I * Uref)^2
-kEstimate = 0.015 # Forçar k para 0.015
+# kEstimate = 0.015 # Forçar k para 0.015
 
-u4BC(x, t::Real) = kEstimate * scalarProfile(x,t)
+u4BC(x, t::Real) = kEstimate * scalarProfile(x,t) * f(t)
 u4BC(t::Real) = x -> u4BC(x,t)
-u4IC(x, t::Real) = kEstimate * exp(-5.0 * x[2] / Ly) * scalarProfile(x,t)
+u4IC(x, t::Real) = kEstimate * scalarProfile(x,t) * f(t)
 u4IC(t::Real) = x -> u4IC(x,t)
 
 #=------------------------
@@ -230,21 +242,21 @@ u4IC(t::Real) = x -> u4IC(x,t)
     ℓ = α * φ
   onde α é uma constante, tipicamente entre 0.07 e 0.1.
 ------------------------=#
-α = 0.07
-ϵEstimate = Cμ^(3/4) * kEstimate^(3/2) / (α * jetDiameter)
+γ = 0.07
+ϵEstimate = Cμ^(3/4) * kEstimate^(3/2) / (γ * φ_jet/Lc)
 
 #=------------------------
   Estimativa baseada em argumentos de escala:
     νₜ ~ Ujet * φ
   Essa estimativa vem de argumentos de escala, supondo que as flutuações da velocidade e comprimento de mistura sejam proporcionais à velocidade média do jato e ao diâmetro do jato, ou seja, νₜ ~ u'ℓ ~ Ujet * φ.
 ------------------------=#
-ϵEstimate = Cμ * kEstimate^2 / (Uref * jetDiameter/Lc)
+# ϵEstimate = Cμ * kEstimate^2 / (Uref * φ_jet/Lc)
 
-ϵEstimate = 0.002025 # Forçar epsilon para 0.002025
+# ϵEstimate = 0.002025 # Forçar epsilon para 0.002025
 
-u5BC(x, t::Real) = ϵEstimate * scalarProfile(x,t)
+u5BC(x, t::Real) = ϵEstimate * scalarProfile(x,t) * f(t)
 u5BC(t::Real) = x -> u5BC(x,t)
-u5IC(x, t::Real) = ϵEstimate * exp(-5.0 * x[2] / Ly) * scalarProfile(x,t)
+u5IC(x, t::Real) = ϵEstimate * scalarProfile(x,t) * f(t)
 u5IC(t::Real) = x -> u5IC(x,t)
 
 S1 = TransientTrialFESpace(V1, [u1BC])
@@ -260,7 +272,7 @@ degree = 2*order
 Ω = Triangulation(model)
 dΩ = Measure(Ω, degree)
 
-Us = VectorValue(0.0, -0.1) # Velocidade de decantação de partículas
+Us = VectorValue(0.0, -0.4) # Velocidade de decantação de partículas
 minVal = 1e-2 # Constante de proteção contra divisão por zero
 
 w(u) = u + Us
@@ -279,7 +291,7 @@ resNS(t, u1, u2, u3, u4, u5, v1) =
   ∫( v1 ⋅ (∇(u1)' ⋅ u1) )dΩ +
   ∫( (1/Re + (nuT∘(u4,u5))) * (∇(v1)⊙ε(u1))*2 )dΩ - 
   ∫( (∇ ⋅ v1) * u2 )dΩ -
-  ∫( Ri * (v1 ⋅ gHat) * u3 )dΩ
+  ∫( Ri * (v1 ⋅ ĝ) * u3 )dΩ
 
 # Equação da continuidade
 resCont(t, u1, v2) =
@@ -298,7 +310,7 @@ resk(t, u1, u3, u4, u5, v4) =
   ∫( (nuT∘(u4,u5)) / σk * ∇(v4)⊙∇(u4) )dΩ -
   ∫( v4 * (kProduction∘(∇(u1),u4,u5)) )dΩ +
   ∫( v4 * u5 * (tanh∘(10.0*u4/kEstimate)) )dΩ +
-  ∫( v4 * Ri * (nuT∘(u4,u5)) / σ * (gHat ⋅ ∇(u3)) * (tanh∘(10.0*u4/kEstimate)) )dΩ
+  ∫( v4 * Ri * (nuT∘(u4,u5)) / σ * (ĝ ⋅ ∇(u3)) * (tanh∘(10.0*u4/kEstimate)) )dΩ
 
 # Equação de epsilon
 resEpsilon(t, u1, u4, u5, v5) =

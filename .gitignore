@@ -3,3 +3,5 @@
 **/results/
 **/output/
 *.log
+*.vtu
+*.vtk

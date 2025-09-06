@@ -182,18 +182,12 @@ if isdir(path)
 end
 mkdir(path)
 
-path = joinpath(@__DIR__, "case-description.txt")
+path = joinpath(path, "case-description.txt")
 if isfile(path)
   rm(path)
 end
 touch(path)
 print(path, caseDesc)
-
-path = joinpath(@__DIR__,"case.log")
-if isfile(path)
-  rm(path)
-end
-touch(path)
 
 #=------------------------
 Solução e escrita dos resultados

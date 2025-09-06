@@ -348,17 +348,6 @@ uh, ph, ch, kh, epsilonh = U₀
   Preparo do diretório de resultados
 ------------------------=#
 
-dirPath = joinpath(@__DIR__, "output")
-if !isdir(dirPath)
-  mkdir(dirPath)
-end
-
-ReStr = Int(round(Re, RoundDown))
-dirPath = joinpath(dirPath,"Re$ReStr-nJets$nJets")
-if !isdir(dirPath)
-  mkdir(dirPath)
-end
-
 caseComment = """
 ----------------------------
       Case description
@@ -370,6 +359,18 @@ Richardson number:  $Ri
 Number of jets:     $nJets
 Settling velocity:  $Us
 """
+
+dirPath = joinpath(@__DIR__, "output")
+if !isdir(dirPath)
+  mkdir(dirPath)
+end
+
+ReStr = Int(round(Re, RoundDown))
+dirPath = joinpath(dirPath,"Re$ReStr-nJets$nJets-Us$Us")
+if isdir(dirPath)
+  rm(dirPath, recursive=true)
+end
+mkdir(dirPath)
 
 filePath = joinpath(dirPath, "case-description.txt")
 touch(filePath)

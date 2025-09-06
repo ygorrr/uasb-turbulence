@@ -139,7 +139,7 @@ op = TransientFEOperator(res, X, Y)
 
 nls = NLSolver(show_trace=true, method=:newton, linesearch=BackTracking(), iterations=10)
 
-CFL = 0.5
+CFL = 0.75
 dx = H_uasb/Lc/n
 Δt = CFL*dx
 θ = 1
@@ -176,7 +176,7 @@ if !isdir(path)
 end
 
 ReStr = Int(round(Re, RoundDown))
-path = joinpath(path,"Re$ReStr-nJets$nJets")
+path = joinpath(path,"Re$ReStr-nJets$nJets-Us$Us")
 if isdir(path)
   rm(path, recursive=true)
 end

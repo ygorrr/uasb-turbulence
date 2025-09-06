@@ -208,6 +208,6 @@ for (t,u_h) in u_ht
   println("Iterations completed: $it/$totalIts")
   ch, kh, epsilonh = u_h 
   if (mod(it,1)==0)
-    writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh, "nu_T"=>nu_T∘(kh, epsilonh)])
+    writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets-Us$Us/uasbcp$it.vtu",cellfields=["ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh, "nu_T"=>nu_T∘(kh, epsilonh)])
   end
 end

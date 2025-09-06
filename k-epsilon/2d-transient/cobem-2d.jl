@@ -394,7 +394,7 @@ for (t,uₕ) in uₕₜ
   println("Iteration $it/$totalIts")
   
   if(mod(it,1)==0)
-    writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph,"ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
+    writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets-Us$Us/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph,"ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
   end
 
   it = it + 1

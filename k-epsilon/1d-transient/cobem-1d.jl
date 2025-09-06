@@ -187,7 +187,9 @@ if isfile(path)
   rm(path)
 end
 touch(path)
-print(path, caseDesc)
+open(path, "w") do file
+    write(file, caseDesc)
+end
 
 #=------------------------
 Solução e escrita dos resultados

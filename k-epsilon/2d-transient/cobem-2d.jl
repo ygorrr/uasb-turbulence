@@ -354,7 +354,7 @@ caseComment = """
 ----------------------------
 Spatial dimensions: 2
 Transient:          true
-Reynolds number:    $ReStr
+Reynolds number:    $Re
 Richardson number:  $Ri
 Number of jets:     $nJets
 Settling velocity:  $Us

@@ -382,7 +382,7 @@ end
   Solução e escrita dos resultados
 ------------------------=#
 
-writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
+writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets-Us$Us/uasbcp$it.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
 
 it = 1
 totalIts = T/Δt

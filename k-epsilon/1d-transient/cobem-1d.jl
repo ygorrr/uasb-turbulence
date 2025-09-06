@@ -198,7 +198,7 @@ Solução e escrita dos resultados
 ch, kh, epsilonh = u_θ
 it = 0
 
-writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets/uasbcp$it.vtu",cellfields=["ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh, "nu_T"=>nu_T∘(kh, epsilonh)])
+writevtk(Ω,(@__DIR__)*"/output/Re$ReStr-nJets$nJets-Us$Us/uasbcp$it.vtu",cellfields=["ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh, "nu_T"=>nu_T∘(kh, epsilonh)])
 
 totalIts = Int(round(T/Δt, RoundUp))
 for (t,u_h) in u_ht

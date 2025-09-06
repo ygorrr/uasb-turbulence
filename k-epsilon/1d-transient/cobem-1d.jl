@@ -170,6 +170,18 @@ Number of jets:     $nJets
 Settling velocity:  $Us
 """
 
+path = joinpath(@__DIR__, "output")
+if !isdir(path)
+  mkdir(path)
+end
+
+ReStr = Int(round(Re, RoundDown))
+path = joinpath(path,"Re$ReStr-nJets$nJets")
+if isdir(path)
+  rm(path, recursive=true)
+end
+mkdir(path)
+
 path = joinpath(@__DIR__, "case-description.txt")
 if isfile(path)
   rm(path)
@@ -183,20 +195,8 @@ if isfile(path)
 end
 touch(path)
 
-path = joinpath(@__DIR__, "output")
-if !isdir(path)
-  mkdir(path)
-end
-
-ReStr = Int(round(Re, RoundDown))
-path = joinpath(path,"Re$ReStr-nJets$nJets")
-if isdir(path)
-  rm(path, recursive=true)
-end
-mkdir(path)
-
 #=------------------------
-  Solução e escrita dos resultados
+Solução e escrita dos resultados
 ------------------------=#
 
 ch, kh, epsilonh = u_θ

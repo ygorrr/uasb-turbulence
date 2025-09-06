@@ -50,7 +50,7 @@ Ri = 0.1
 
 
 U = VectorValue(0.33) # Valor adimensional calculado do perfil do jato no código 2d
-Us = VectorValue(-0.4)
+Us = VectorValue(-0.36)
 W = U + Us
 ĝ = VectorValue(-1.0)
 
@@ -96,19 +96,36 @@ testSpace_C = TestFESpace(model_Ω, refFE, conformity=:H1, dirichlet_tags="tag_1
 testSpace_k = TestFESpace(model_Ω, refFE, conformity=:H1, dirichlet_tags="tag_1")
 testSpace_epsilon = TestFESpace(model_Ω, refFE, conformity=:H1, dirichlet_tags="tag_1")
 
-# Condições de contorno
-bc_C(x, t::Real) = (1 - Lc/H_uasb*x[1])
+
+# --- Condições de contorno e condições iniciais ---
+#=
+06/09/2025
+- Condições de contorno na saída agora são Neumann homogêneas
+- Condições de contorno agora possuem inicialização suave no tempo
+- Condições iniciais são pequenas, mas não nulas. Código divergiu com nulas
+=#
+
+α = 0.15
+f(t) = 1-exp(-t/α)
+
+bc_C(x, t::Real) = 1.0 * f(t)
 bc_C(t::Real) = x -> bc_C(x, t)
+ic_C(x, t::Real) = 0.01
+ic_C(t::Real) = x -> ic_C(x, t)
 
 I = 0.1
-k_ΓD = (3/2)*(I*U_jet/Uc)^2
-bc_k(x, t::Real) = k_ΓD*(1 - Lc/H_uasb*x[1])
+k_ΓD = (3/2)*(I*U_jet/Uc)^2 / 3
+bc_k(x, t::Real) = k_ΓD * f(t)
 bc_k(t::Real) = x -> bc_k(x, t)
+ic_k(x, t::Real) = 0.01 * k_ΓD
+ic_k(t::Real) = x -> ic_k(x, t)
 
 γ = 0.07
-ϵ_ΓD = Cμ^(3/4) * k_ΓD^(3/2) / (γ * φ_jet/Lc)
-bc_epsilon(x, t::Real) = ϵ_ΓD * (1 - Lc/H_uasb*x[1])
+ϵ_ΓD = Cμ^(3/4) * k_ΓD^(3/2) / (γ * φ_jet/Lc) / 3
+bc_epsilon(x, t::Real) = ϵ_ΓD * f(t)
 bc_epsilon(t::Real) = x -> bc_epsilon(x, t)
+ic_epsilon(x, t::Real) = 0.01 * ϵ_ΓD
+ic_epsilon(t::Real) = x -> ic_epsilon(x, t)
 
 # Espaços de funções candidatas
 trialSpace_C = TransientTrialFESpace(testSpace_C, bc_C)
@@ -122,18 +139,18 @@ op = TransientFEOperator(res, X, Y)
 
 nls = NLSolver(show_trace=true, method=:newton, linesearch=BackTracking(), iterations=10)
 
-CFL = 0.25
+CFL = 0.5
 dx = H_uasb/Lc/n
 Δt = CFL*dx
 θ = 1
 ode_solver = ThetaMethod(nls,Δt,θ)
 
-u_θ1 = interpolate_everywhere(bc_C(0), trialSpace_C(0.0))
-u_θ2 = interpolate_everywhere(bc_k(0), trialSpace_k(0.0))
-u_θ3 = interpolate_everywhere(bc_epsilon(0), trialSpace_epsilon(0.0))
+u_θ1 = interpolate_everywhere(ic_C(0), trialSpace_C(0.0))
+u_θ2 = interpolate_everywhere(ic_k(0), trialSpace_k(0.0))
+u_θ3 = interpolate_everywhere(ic_epsilon(0), trialSpace_epsilon(0.0))
 u_θ = interpolate_everywhere([u_θ1, u_θ2, u_θ3], X(0.0))
 t_θ = 0.0
-T = 50.0
+T = 500.0
 
 u_ht = solve(ode_solver, op, t_θ, T, u_θ)
 

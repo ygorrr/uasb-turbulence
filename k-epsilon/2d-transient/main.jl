@@ -20,17 +20,18 @@ Cϵ2 = 1.92
 
 #--- Parâmetros geométricos e operacionais do UASB ---
 φ_uasb = 1.8              # m
-H_uasb = 2*φ_uasb         # m
+H_uasb = 2         # m
 A_uasb = π*(φ_uasb/2)^2   # m²
-HDT = 60*60             # s
-Q = A_uasb*H_uasb/HDT     # m³/s
-U_uasb = H_uasb/HDT       # m/s
+Q = 0.5/1000    # m³/s
+HDT = H_uasb * A_uasb / Q
+HDT_horas = HDT / 3600
+U_uasb = Q / A_uasb       # m/s
 
 φ_jet = 0.2               # m
 A_jet = π*(φ_jet/2)^2     # m²
 xJets = [0.0]     # Posições dos jatos ao longo de x
 nJets = length(xJets)     # Número de jatos
-U_jet = Q/(nJets*A_jet)   # m/s
+U_jet = Q/(9*A_jet)   # m/s
 
 Us = VectorValue(0.0, -0.1) # Velocidade de decantação de partículas
 minVal = 1e-2 # Constante de proteção contra divisão por zero
@@ -42,10 +43,10 @@ Cc = 1.0
 
 #--- Números adimensionais do modelo ---
 # Número de Reynolds do UASB
-Re_uasb = U_uasb*φ_uasb/nu 
+Re_uasb = ρ * U_uasb*φ_uasb / μ
 
 # Número de Reynolds do jato
-Re_jet = U_jet*φ_jet/nu 
+Re_jet = ρ * U_jet*φ_jet / μ
 
 # Número de Reynolds do modelo
 Re = Uc*Lc/nu

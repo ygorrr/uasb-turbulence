@@ -1,4 +1,5 @@
 using Gridap
+using GridapGmsh
 using LineSearches: BackTracking
 using Plots
 using Dates
@@ -43,13 +44,13 @@ Cc = 1.0
 
 #--- Números adimensionais do modelo ---
 # Número de Reynolds do UASB
-Re_uasb = ρ * U_uasb*φ_uasb / μ
+Re_uasb = ρ * U_uasb * φ_uasb / μ
 
 # Número de Reynolds do jato
-Re_jet = ρ * U_jet*φ_jet / μ
+Re_jet = ρ * U_jet * φ_jet / μ
 
 # Número de Reynolds do modelo
-Re = Uc*Lc/nu
+Re = ρ * Uc * Lc / μ
 Sc = 1.0
 # Ri = β*g*(Cc/Lc)/(Uc/Lc)^2
 Ri = 1e-1
@@ -179,11 +180,12 @@ Lx = φ_uasb / Lc
 Ly = H_uasb / Lc
 domain = (-Lx/2, Lx/2, 0, Ly)
 partition = (n, 2*n)
-model = CartesianDiscreteModel(domain, partition; isperiodic=(true,false))
+# model = CartesianDiscreteModel(domain, partition; isperiodic=(true,false))
+model = GmshDiscreteModel(joinpath(@__DIR__,"uasb.msh"); isperiodic=(true,false))
 
-labels = get_face_labeling(model)
-add_tag_from_tags!(labels, "top", [6,])
-add_tag_from_tags!(labels, "bottom", [5,])
+# labels = get_face_labeling(model)
+# add_tag_from_tags!(labels, "top", [6,])
+# add_tag_from_tags!(labels, "bottom", [5,])
 
 order = 2
 
@@ -193,11 +195,11 @@ reffe_C = ReferenceFE(lagrangian, Float64, order)
 reffe_k = ReferenceFE(lagrangian, Float64, order)
 reffe_ε = ReferenceFE(lagrangian, Float64, order)
 
-V_U = TestFESpace(model, reffe_U, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
+V_U = TestFESpace(model, reffe_U, conformity=:H1, dirichlet_tags=["bottom"])
 V_P = TestFESpace(model, reffe_P, conformity=:L2, dirichlet_tags=["top"])
-V_C = TestFESpace(model, reffe_C, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
-V_k = TestFESpace(model, reffe_k, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
-V_ε = TestFESpace(model, reffe_ε, conformity=:H1, labels=labels, dirichlet_tags=["bottom"])
+V_C = TestFESpace(model, reffe_C, conformity=:H1, dirichlet_tags=["bottom"])
+V_k = TestFESpace(model, reffe_k, conformity=:H1, dirichlet_tags=["bottom"])
+V_ε = TestFESpace(model, reffe_ε, conformity=:H1, dirichlet_tags=["bottom"])
 
 BC_U(x, t::Real) = VectorValue(0, jetProfile(x,t))
 BC_U(t::Real) = x -> BC_U(x,t)
@@ -320,7 +322,7 @@ isdir(path) ? nothing : mkdir(path)
 
 touch(joinpath(path, "info.txt"))
 open(joinpath(path, "info.txt"), "w") do file
-    write(file, caseComment)
+    write(file, info)
 end
 
 #--- Solução e escrita dos resultados ---

@@ -1,4 +1,4 @@
-h = 0.1;
+h = 0.025;
 L = 1.8;
 H = 2.0;
 
@@ -20,6 +20,6 @@ Physical Line("bottom") = {1};
 Physical Line("top") = {3};
 Physical Line("sides") = {2, 4};
 
+//Recombine Surface{1};
 Mesh 2;
-
 Save "uasb.msh";

@@ -181,7 +181,7 @@ Ly = H_uasb / Lc
 domain = (-Lx/2, Lx/2, 0, Ly)
 partition = (n, 2*n)
 # model = CartesianDiscreteModel(domain, partition; isperiodic=(true,false))
-model = GmshDiscreteModel(joinpath(@__DIR__,"uasb.msh"); isperiodic=(true,false))
+model = GmshDiscreteModel(joinpath(@__DIR__,"uasb.msh"))
 
 # labels = get_face_labeling(model)
 # add_tag_from_tags!(labels, "top", [6,])
@@ -326,20 +326,22 @@ open(joinpath(path, "info.txt"), "w") do file
 end
 
 #--- Solução e escrita dos resultados ---
-writevtk(Ω, path*"/0.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
+writevtk(Ω, path*"/result0.vtu",cellfields=["uh"=>uh,"ph"=>ph, "ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
 
+step = 1
 it = 1
 totalIts = T/Δt
 for (t,uₕ) in uₕₜ
-  global it
+  global it, step
   local uh,ph,ch,kh,epsilonh
   uh, ph, ch, kh, epsilonh = uₕ
   
   println("Iteration $it/$totalIts")
   
-  if(mod(it,1)==0)
-    writevtk(Ω, path*"/$it.vtu",cellfields=["uh"=>uh,"ph"=>ph,"ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
+  if(mod(it,10)==0)
+    writevtk(Ω, path*"/result$step.vtu",cellfields=["uh"=>uh,"ph"=>ph,"ch"=>ch, "kh"=>kh, "epsilonh"=>epsilonh])
+    step += 1
   end
 
-  it = it + 1
+  it += 1
 end
